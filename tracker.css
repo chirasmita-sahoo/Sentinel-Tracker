@@ -1,0 +1,211 @@
+/* --- Core Reset & Layout --- */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Roboto, sans-serif;
+}
+
+body {
+    background-color: #060a3a;
+    color: white;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+}
+
+.dashboard-container {
+    display: flex;
+    width: 100%;
+    height: 100%;
+}
+
+/* --- Sidebar (Control Panel) --- */
+.control-panel {
+    width: 50%; /* Initial State */
+    height: 100%;
+    background: rgba(10, 15, 45, 0.98);
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 40px;
+    display: flex;
+    flex-direction: column;
+    z-index: 1002;
+    transition: all 0.8s cubic-bezier(0.65, 0, 0.35, 1);
+    box-shadow: 10px 0 30px rgba(0, 0, 0, 0.5);
+}
+
+/* --- Map Section --- */
+#map {
+    width: 50%; /* Initial State */
+    height: 100%;
+    position: relative;
+    transition: all 0.8s cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+/* --- TRANSFORMATION: ACTIVE STATE --- */
+.dashboard-container.active .control-panel {
+    width: 25%;
+    min-width: 320px;
+    padding: 25px;
+}
+
+.dashboard-container.active #map {
+    width: 75%;
+}
+
+/* --- Sidebar Content Styling --- */
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+}
+
+#mode-badge {
+    background: #3498db;
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: bold;
+    letter-spacing: 1px;
+}
+
+.input-section {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-bottom: 30px;
+}
+
+label {
+    font-size: 0.75rem;
+    color: #3498db;
+    text-transform: uppercase;
+    font-weight: bold;
+}
+
+input {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    padding: 14px;
+    border-radius: 10px;
+    color: white;
+    font-size: 0.9rem;
+}
+
+#start-btn {
+    background: #2ecc71;
+    color: white;
+    border: none;
+    padding: 16px;
+    border-radius: 10px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: 0.3s;
+    margin-top: 10px;
+}
+
+#start-btn:hover {
+    background: #27ae60;
+    transform: translateY(-2px);
+}
+
+/* --- Stats Panel (Fades in after transition) --- */
+.stats-panel {
+    opacity: 0;
+    transition: opacity 0.5s ease 0.8s;
+    display: grid;
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.dashboard-container.active .stats-panel {
+    opacity: 1;
+}
+
+.stat-item {
+    background: rgba(255, 255, 255, 0.03);
+    padding: 15px;
+    border-radius: 12px;
+    border-left: 4px solid #3498db;
+}
+
+.stat-item small {
+    color: #888;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+}
+
+.stat-item p {
+    font-size: 1.1rem;
+    font-weight: bold;
+    margin-top: 4px;
+}
+
+/* --- Scanning Animation Overlay --- */
+#map-scanner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 20, 40, 0.6);
+    background-image: 
+        linear-gradient(rgba(0, 255, 0, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 255, 0, 0.05) 1px, transparent 1px);
+    background-size: 40px 40px;
+    z-index: 1001;
+    display: none; /* Controlled by JS class 'activating' */
+    pointer-events: none;
+    justify-content: center;
+    align-items: center;
+}
+
+.dashboard-container.activating #map-scanner {
+    display: flex;
+}
+
+.scan-line {
+    position: absolute;
+    width: 100%;
+    height: 4px;
+    background: #3498db;
+    box-shadow: 0 0 20px #3498db;
+    top: 0;
+    animation: scanMove 1s linear infinite;
+}
+
+.scan-text {
+    color: #3498db;
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    letter-spacing: 3px;
+    animation: blink 0.5s step-end infinite;
+}
+
+@keyframes scanMove {
+    0% { top: 0%; }
+    100% { top: 100%; }
+}
+
+@keyframes blink {
+    50% { opacity: 0; }
+}
+
+.stop-btn {
+    margin-top: auto;
+    background: rgba(231, 76, 60, 0.2);
+    border: 1px solid #e74c3c;
+    color: #e74c3c;
+    padding: 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+
+}
+
+#coords {
+    color: #3498db;
+    text-shadow: 0 0 5px rgba(52, 152, 219, 0.5);
+    letter-spacing: 1px;
+}

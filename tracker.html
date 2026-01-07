@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentinel GPS | Live Security Feed</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <link rel="stylesheet" href="tracker.css">
+</head>
+<body>
+
+    <div class="dashboard-container">
+        <aside class="control-panel">
+            <div class="panel-header">
+                <h2>🛡️ SENTINEL</h2>
+                <span id="mode-badge">LOADING...</span>
+            </div>
+
+            <div class="input-section">
+                <label>Target Destination</label>
+                <input type="text" id="end-input" placeholder="Latitude, Longitude">
+                <p style="font-size: 0.7rem; color: #666; margin-top: -10px;">
+                    Example: 12.9810, 77.6400
+                </p>
+                <button id="start-btn" onclick="activateSecurity()">INITIALIZE PROTOCOL</button>
+            </div>
+
+            <div class="stats-panel">
+                <div class="stat-item">
+                    <small>System Status</small>
+                    <p id="status" style="color: #3498db;">WAITING FOR INPUT</p>
+                </div>
+                <div class="stat-item">
+                    <small>Velocity</small>
+                    <p id="speed">0.0 km/h</p>
+                </div>
+                <div class="stat-item">
+                    <small>Distance to Objective</small>
+                    <p id="goaldist">-- km</p>
+                </div>
+                <div class="stat-item">
+                    <small>Current Coordinates</small>
+                    <p id="coords" style="font-size: 0.9rem; font-family: monospace;">Searching...</p>
+                </div>
+            </div>
+
+            <button class="stop-btn" onclick="window.location.href='index.html'">TERMINATE SESSION</button>
+        </aside>
+
+        <main id="map">
+            <div id="map-scanner">
+                <div class="scan-line"></div>
+                <div class="scan-text">ESTABLISHING SATELLITE LINK...</div>
+            </div>
+        </main>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script src="tracker.js"></script>
+
+</body>
+</html>
