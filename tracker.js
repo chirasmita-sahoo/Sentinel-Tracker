@@ -1,10 +1,10 @@
 // --- Global Variables ---
 let map, driverMarker, pathCoordinates = [];
-let polyline, goalMarker, goalCircle;
-let initialGeofence;
+let polyline, goalMarker;
 let goalcoord = null;
 let lastdistanceToGoal = null;
 let watchId = null;
+let lastKnownPosition = null;
 //intial location
 function showInitialLocation() {
     if ("geolocation" in navigator) {
@@ -26,12 +26,37 @@ function showInitialLocation() {
             
             document.getElementById('status').innerText = "SIGNAL ACQUIRED";
             document.getElementById('status').style.color = "#3498db";
+            lastKnownPosition = currentPos;
+
         }, (error) => {
-            document.getElementById('status').innerText = "GPS ACCESS DENIED";
-            document.getElementById('status').style.color = "#e74c3c";
+            handleGeolocationError(error);
         });
     }
+    else {
+        showError("Geolocation is not supported by your browser.");
+    }
 }
+
+function handleGeolocationError(error) {
+    const status = document.getElementById('status');
+    let message = "";
+    switch(error.code) {
+        case error.PERMISSION_DENIED:
+            message = "GPS ACCESS DENIED- Please enable location Permission.";
+            break;
+        case error.POSITION_UNAVAILABLE:
+            message = "GPS POSITION UNAVAILABLE- Check GPS settings.";
+            break;
+        case error.TIMEOUT:
+            message = "GPS TIMEOUT- Request took too long.";
+            break;
+        default:
+            message = "GPS ERROR- An unknown error occurred.";
+    }
+    status.innerText = message;
+    status.style.color = "#e74c3c";
+}
+
 // --- 1. Initialize Page on Load ---
 window.onload = function() {
     const selectedMode = localStorage.getItem('userTransportMode');
@@ -62,7 +87,7 @@ function initMap() {
 
     driverMarker = L.marker([0, 0], { icon: greenIcon }).addTo(map);
     
-    // Path color changed to Green to match the user
+    // Path polyline
     polyline = L.polyline([], { 
         color: '#2ecc71', 
         weight: 4, 
