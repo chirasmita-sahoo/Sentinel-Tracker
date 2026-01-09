@@ -1,15 +1,70 @@
 // --- Global Variables ---
-let map, driverMarker, pathCoordinates = [];
+let map, userMarker, pathCoordinates = [];
 let polyline, goalMarker;
 let goalcoord = null;
 let lastdistanceToGoal = null;
 let watchId = null;
-let lastKnownPosition = null;
+let userlastpos = null;
+
+let debounceTimeout = null;
+let chosendest=null;
+let mappicking=false;
+let previewmarker=null;
+//CONFIGURATION
+const geocodeset={
+    api:'https://nominatim.openstreetmap.org',
+    threshold:3,
+    debounce:300
+};
+
+window.onload = function() {
+    const selectedMode = localStorage.getItem('userTransportMode');
+    
+    if (!selectedMode) {
+        window.location.href = 'index.html';
+        return;
+    }
+        document.getElementById('mode-badge').innerText = selectedMode.toUpperCase();
+        initMap();
+        showInitialLocation();
+        enablesearch();
+        mappick();
+
+};
+
+// --- 2. Leaflet Map Setup ---
+function initMap() {
+    map = L.map('map', { zoomControl: false }).setView([0,0], 15);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+    // User Icon (Green)
+    userMarker = L.marker([0, 0], {
+        icon: L.divIcon({
+        className: 'custom-div-icon',
+        html: "<div style='background-color:#2ecc71; height:12px; width:12px; border-radius:50%; border:2px solid white; box-shadow:0 0 10px #2ecc71;'></div>",
+        iconSize: [12, 12],
+        iconAnchor: [6, 6]})
+    }).addTo(map);
+    
+    // Path polyline
+    polyline = L.polyline([], { 
+        color: '#2ecc71', 
+        weight: 4, 
+        opacity: 0.6,
+        dashArray: '5, 10' 
+    }).addTo(map);
+}
+
 //intial location
 function showInitialLocation() {
-    if ("geolocation" in navigator) {
-        document.getElementById('status').innerText = "LOCATING SIGNAL...";
-        
+    if(!("geolocation" in navigator)) {
+        showError("Geolocation is not supported by your browser.");
+        return;
+    }
+
+        updateStatus("Getting Signals", "#3498db");
+
         navigator.geolocation.getCurrentPosition((position) => {
             const { latitude, longitude } = position.coords;
             const currentPos = L.latLng(latitude, longitude);
@@ -18,27 +73,23 @@ function showInitialLocation() {
             map.setView(currentPos, 15);
 
             // Update the marker position
-            driverMarker.setLatLng(currentPos);
+            userMarker.setLatLng(currentPos);
             
             // Update the UI coordinates
             document.getElementById('coords').innerText = 
                 `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
             
-            document.getElementById('status').innerText = "SIGNAL ACQUIRED";
-            document.getElementById('status').style.color = "#3498db";
-            lastKnownPosition = currentPos;
+            updateStatus("Signals Acquired", "#2ecc71");
+            userlastpos = currentPos;
 
         }, (error) => {
             handleGeolocationError(error);
         });
-    }
-    else {
-        showError("Geolocation is not supported by your browser.");
-    }
+    
+    
 }
 
 function handleGeolocationError(error) {
-    const status = document.getElementById('status');
     let message = "";
     switch(error.code) {
         case error.PERMISSION_DENIED:
@@ -53,61 +104,180 @@ function handleGeolocationError(error) {
         default:
             message = "GPS ERROR- An unknown error occurred.";
     }
-    status.innerText = message;
-    status.style.color = "#e74c3c";
+    updateStatus(message, "#e74c3c");
 }
 
-// --- 1. Initialize Page on Load ---
-window.onload = function() {
-    const selectedMode = localStorage.getItem('userTransportMode');
-    
-    if (selectedMode) {
-        document.getElementById('mode-badge').innerText = selectedMode.toUpperCase();
-        initMap();
-        showInitialLocation();
-    } else {
-        // Redirect back if no mode selected
-        window.location.href = 'index.html';
-    }
-};
+//--3.Adress Search Bar
+function enablesearch(){
+    const searchbox=document.getElementById('start-input');
+    const dropdown=document.getElementById('suggestions');
 
-// --- 2. Leaflet Map Setup ---
-function initMap() {
-    map = L.map('map', { zoomControl: false }).setView([12.9716, 77.5946], 15);
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-
-    // Default Sentinel User Icon (Green)
-    const greenIcon = L.divIcon({
-        className: 'custom-div-icon',
-        html: "<div style='background-color:#2ecc71; height:12px; width:12px; border-radius:50%; border:2px solid white; box-shadow:0 0 10px #2ecc71;'></div>",
-        iconSize: [12, 12],
-        iconAnchor: [6, 6]
+    searchbox.addEventListener('input', function(e){
+        const typed=e.target.value.trim();
+        clearTimeout(debounceTimeout);
+        if(typed.length < geocodeset.threshold){
+            dropdown.style.display='none';
+            return;
+        }
+        debounceTimeout=setTimeout(()=>{
+            searchplace(typed);
+        },geocodeset.debounce);
     });
+    document.addEventListener('click', function(e){
+        if(!e.target.closest('.input-section')){
+            dropdown.style.display='none';
+        }
+    });
+}
+async function searchplace(query){
+    const dropdown=document.getElementById('suggestions');
+    try{
+        dropdown.innerHTML='<div class="dropdown-loading">Searching...</div>';
+        dropdown.style.display='block';
 
-    driverMarker = L.marker([0, 0], { icon: greenIcon }).addTo(map);
-    
-    // Path polyline
-    polyline = L.polyline([], { 
-        color: '#2ecc71', 
-        weight: 4, 
-        opacity: 0.6,
-        dashArray: '5, 10' 
-    }).addTo(map);
+        const url = `${geocodeset.api}/search?format=json&q=${encodeURIComponent(query)}`;
+        const response = await fetch(url,{
+            headers:{
+                'User-Agent':'SentinelGPS/1.0'
+        }
+    });
+    if(!response.ok) throw new Error('Search failed');
+    const places=await response.json();
+    showsuggestions(places);
+    }catch(error){
+        console.error('Search Error:',error);
+        dropdown.innerHTML='<div class="dropdown-error"> Search failed.Try Again</div>';
+
+    }
+}
+function showsuggestions(places){
+    const dropdown=document.getElementById('suggestions');
+    if(places.length===0){
+        dropdown.innerHTML='<div class="dropdown-noresults">No results found</div>';
+        return;
+    }
+    dropdown.innerHTML='';
+    places.forEach(place=>{
+        const item=document.createElement('div');
+        item.className='dropdown-item';
+        item.innerHTML=`
+        <div class="place-name">${highlightMatch(place.display_name)}</div>
+        <div class="place-type">${place.type||'Location'}</div>
+        </div>`;
+        item.addEventListener('click',()=>{
+            pickplace(place);
+        });
+        dropdown.appendChild(item);
+    });
+    dropdown.style.display='block';
+}
+function highlightMatch(placeName){
+    const query=document.getElementById('start-input').value.trim();
+    if(!query) return placeName;
+    const pattern=new RegExp(`(${query})`,'gi');
+    return placeName.replace(pattern,'<strong>$1</strong>');
+}
+function pickplace(place){
+    const searchbox=document.getElementById('start-input');
+    const dropdown=document.getElementById('suggestions');
+    searchbox.value=place.display_name;
+    dropdown.style.display='none';
+    const coords={
+        lat:parseFloat(place.lat),
+        lng:parseFloat(place.lon)
+    };
+    showdestpreview(coords,place.display_name);
+    startbutton();
+    chosendest=coords;
+}
+function mappick(){
+    const btn=document.getElementById('map-select-btn');
+    btn.addEventListener('click',togglemappick);
+}
+function togglemappick(){
+    mappicking=!mappicking;
+    const btn=document.getElementById('map-select-btn');
+    const mapDiv=document.getElementById('map');
+    if(mappicking){
+        btn.classList.add('active');
+        btn.innerText='Cancel map selection';
+        mapDiv.style.cursor='crosshair';
+        map.on('click',onmappick);
+        notify("Map Selection Active. Click on the map to choose destination.");
+    }
+    else{
+        btn.classList.remove('active');
+        btn.innerText='SELECT ON MAP';
+        mapDiv.style.cursor='';
+       map.off('click',onmappick);
+    }
+}
+async function onmappick(e){
+    const coords={
+        lat:e.latlng.lat,
+        lng:e.latlng.lng
+    };
+    updateStatus("Fetching address...", "#f1c40f");
+    try{
+        const placeName=await lookupAddress(coords.lat,coords.lng);
+        document.getElementById('start-input').value=placeName;
+        showdestpreview(coords,placeName);
+        togglemappick();
+        startbutton();
+        chosendest=coords;
+        updateStatus("Address fetched", "#2ecc71");
+    }catch(error){
+        console.error('Reverse Geocoding Error:',error);
+        const coordsText=`${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`;
+        document.getElementById('start-input').value=coordsText;
+        showdestpreview(coords,"Selected Locations");
+        togglemappick();
+        startbutton();
+        chosendest=coords;
+    }
+}
+async function lookupAddress(lat,lng){
+    const url = `${geocodeset.api}/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18`;
+    const response = await fetch(url,{
+        headers: {'User-Agent':'SentinelGPS/1.0'}});
+    if(!response.ok) throw new Error('Lookup failed');
+    const data=await response.json();
+    return data.display_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 }
 
-// --- 3. Activation & Transition Logic ---
+function showdestpreview(coords,placeName){
+    if(previewmarker) map.removeLayer(previewmarker);
+    previewmarker=L.marker([coords.lat,coords.lng],{
+        icon:L.divIcon({
+            className:'destination-preview-icon',
+            html:"<div class='preview-marker'></div>",
+           iconSize:[12,12],
+           iconAnchor:[6,6]
+        }) }).addTo(map);
+        previewmarker.bindPopup(`<div class="preview-popup">
+           <strong>Destination</strong><br>
+           ${placeName}
+           </div>`).openPopup();
+       
+if(userlastpos){
+    const bounds=L.latLngBounds([userlastpos,[coords.lat,coords.lng]])
+    map.fitBounds(bounds,{padding:[50,50]});
+}else{
+    map.setView([coords.lat,coords.lng],15);
+}
+}
+
+// --- 4. Activation & Transition Logic ---
 function activateSecurity() {
     const dashboard = document.querySelector('.dashboard-container');
-    const endInput = document.getElementById('end-input').value;
-
-    if (!endInput) return alert("Please enter destination coordinates (Lat, Lng)");
-
-    // Start UI Transitions
+    if(!chosendest){
+        alert("Please select a destination before starting the tracker.");
+        return;
+    }
     dashboard.classList.add('activating');
     dashboard.classList.add('active');
 
-    // Remove scanner and fix map after slide finishes
+    // Removes scanner and fix map after slide finishes
     setTimeout(() => {
         dashboard.classList.remove('activating');
         map.invalidateSize(); 
@@ -115,18 +285,32 @@ function activateSecurity() {
         document.getElementById('status').style.color = "#2ecc71";
     }, 1200);
 
-    // Set Goal Location
-    const coords = endInput.split(',').map(Number);
-    goalcoord = L.latLng(coords[0], coords[1]);
+
+
+    goalcoord = L.latLng(chosendest.lat, chosendest.lng);
+    if(previewmarker){
+        map.removeLayer(previewmarker);
+        previewmarker=null;
+    }
 
     // Add Goal Visuals
     if (goalMarker) map.removeLayer(goalMarker);
-    goalMarker = L.marker(goalcoord).addTo(map).bindPopup("Destination");
-    
+    goalMarker = L.marker(goalcoord,{
+        icon: L.divIcon({
+            className: 'destination-icon',
+            html: "<div class='destination-final-dot'></div>",
+            iconSize: [16, 16],
+            iconAnchor: [8, 8]
+        })
+    }).addTo(map).bindPopup("Destination");
+    if (userlastpos) {
+        const bounds = L.latLngBounds([userlastpos, goalcoord]);
+        map.fitBounds(bounds, { padding: [50, 50] });
+    }
     startGPSMonitoring();
 }
 
-// --- 4. Real-Time GPS Logic ---
+// --- 5. Real-Time GPS Logic ---
 function startGPSMonitoring() {
     if ("geolocation" in navigator) {
         watchId = navigator.geolocation.watchPosition(
@@ -144,10 +328,10 @@ function startGPSMonitoring() {
 
 // --- 5. Movement & Security Logic ---
 function updateTracker(currentPos, rawSpeed) {
-    const prevPos = driverMarker.getLatLng();
+    const prevPos = userMarker.getLatLng();
 
     // 1. Smoothly move marker
-    moveMarker(driverMarker, prevPos, currentPos, 1000);
+    moveMarker(userMarker, prevPos, currentPos, 1000);
 
     // 2. Update Path
     pathCoordinates.push([currentPos.lat, currentPos.lng]);
@@ -188,7 +372,7 @@ function checkSecurityRisk(currentPos, currentDist, speed) {
     lastdistanceToGoal = currentDist;
 }
 
-// Helper: Smooth Marker interpolation
+// Helper fn
 function moveMarker(marker, startLatLng, endLatLng, duration) {
     const start = performance.now();
     function animate(currentTime) {
@@ -201,3 +385,28 @@ function moveMarker(marker, startLatLng, endLatLng, duration) {
     }
     requestAnimationFrame(animate);
 }
+function updateStatus(message, color) {
+    const status = document.getElementById('status');
+    status.innerText = message;
+    status.style.color = color;
+}
+
+function startbutton() {
+    const btn = document.getElementById('start-btn');
+    btn.disabled = false;
+    btn.style.opacity = '1';
+}
+
+function notify(message) {
+    console.log(message);
+    if ("Notification" in window && Notification.permission === "granted") {
+        new Notification("Sentinel GPS", { body: message });
+    }
+}
+
+function showError(message) {
+    alert("⚠️"+message);}
+
+    if("Notification" in window&& Notification.permission == "default"){
+        Notification.requestPermission();
+    }

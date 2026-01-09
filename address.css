@@ -1,0 +1,193 @@
+.search-wrapper{
+    position: relative;
+}
+.search-icon{
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    opacity: 0.5;
+    font-size: 1.2rem;
+}
+.dropdown {
+    display: none;
+    position: absolute;
+    top: calc(100% + 5px);
+    left: 0;
+    right: 0;
+    max-height: 300px;
+    overflow-y: auto;
+    background: rgba(10, 15, 45, 0.98);
+    border: 1px solid rgba(52, 152, 219, 0.3);
+    border-radius: 12px;
+    z-index: 1000;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+.dropdown::-webkit-scrollbar {
+    width: 6px;
+}
+.dropdown::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+}
+.dropdown::-webkit-scrollbar-thumb {
+    background: #3498db;
+    border-radius: 3px;
+}
+.dropdown-item {
+    padding: 12px 15px;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    transition: all 0.3s;
+}
+.dropdown-item:last-child {
+    border-bottom: none;
+}
+.dropdown-item:hover {
+    background-color: #34495e;
+    cursor: pointer;
+}
+.place-name {
+    color: #ecf0f1;
+    font-size: 0.9rem;
+    margin-bottom: 3px;
+    word-break: break-word;
+}
+
+.place-name strong {
+    color: #3498db;
+    font-weight: 700;
+}
+
+.place-type {
+    color: #95a5a6;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.dropdown-loading,
+.dropdown-error,
+.dropdown-noresults {
+    padding: 15px;
+    text-align: center;
+    color: #95a5a6;
+    font-size: 0.85rem;
+}
+.dropdown-error {
+    color: #e74c3c;
+}
+.dropdown-loading::after {
+    content: '';
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(52, 152, 219, 0.3);
+    border-top-color: #3498db;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-left: 8px;
+}
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.map-btn {
+    background: rgba(52, 152, 219, 0.15);
+    border: 1px solid rgba(52, 152, 219, 0.3);
+    padding: 12px;
+    border-radius: 10px;
+    color: #3498db;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-weight: 600;
+    width: 100%;
+    font-size: 0.9rem;
+}
+
+.map-btn:hover {
+    background: rgba(52, 152, 219, 0.25);
+    border-color: #3498db;
+    transform: translateY(-2px);
+}
+.map-btn.active {
+    background: rgba(231, 76, 60, 0.2);
+    border-color: #e74c3c;
+    color: #e74c3c;
+    animation: pulse-border 1.5s infinite;
+}
+@keyframes pulse-border {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 0 8px rgba(231, 76, 60, 0);
+    }
+}
+
+.input-hint {
+    font-size: 0.75rem;
+    color: #666;
+    margin: 5px 0 10px 0;
+}
+.preview-marker {
+    background-color: #e74c3c;
+    height: 20px;
+    width: 20px;
+    border-radius: 50%;
+    border: 3px solid white;
+    box-shadow: 0 0 15px #e74c3c;
+    animation: pulse 1.5s infinite;
+}
+
+.destination-final-dot {
+    background-color: #e74c3c;
+    height: 16px;
+    width: 16px;
+    border-radius: 50%;
+    border: 3px solid white;
+    box-shadow: 0 0 10px #e74c3c;
+}
+
+.destination-preview-icon{
+     background: transparent !important;
+     border: none !important;
+}
+.destination-icon{
+    background: transparent !important;
+    border: none !important;
+}
+.custom-div-icon {
+    background: transparent !important;
+    border: none !important;
+}
+/* Pulse animation for preview marker */
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.15);
+        opacity: 0.8;
+    }
+}
+
+.preview-popup {
+    text-align: center;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    padding: 5px;
+}
+
+.preview-popup strong {
+    color: #e74c3c;
+    font-size: 1.1rem;
+    display: block ;
+    margin-bottom: 3px;
+}
+
+@media (max-width: 768px) {
+    .dropdown { max-height: 200px;}
+    .place-name {font-size: 0.85rem;} 
+    .place-type {  font-size: 0.7rem; }
+}
