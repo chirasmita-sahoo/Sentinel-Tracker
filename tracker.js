@@ -5,16 +5,36 @@ let goalcoord = null;
 let lastdistanceToGoal = null;
 let watchId = null;
 let userlastpos = null;
+let lastsavetime=0;
 
 let debounceTimeout = null;
 let chosendest=null;
 let mappicking=false;
 let previewmarker=null;
+let alertShown=false;
+let stationaryStartTime = null;
+let stationaryTimer = null;
+let journeyStartTime = null;
 //CONFIGURATION
 const geocodeset={
     api:'https://nominatim.openstreetmap.org',
     threshold:3,
-    debounce:300
+    debounce:300,
+    lastrequest:0,
+    minDelay:1000
+};
+
+const constants={
+    stationary_time:300000, 
+    proximaldist:0.5,
+    arrivaldist:0.1,
+    deviationdist:0.05,
+    movementspeed:0.01,
+    speedthresholds:{
+        walking:12,
+        car:100,
+        train:200,
+    }
 };
 
 window.onload = function() {
@@ -29,12 +49,13 @@ window.onload = function() {
         showInitialLocation();
         enablesearch();
         mappick();
+        loadJourneyFromStorage();
 
 };
 
 // --- 2. Leaflet Map Setup ---
 function initMap() {
-    map = L.map('map', { zoomControl: false }).setView([0,0], 15);
+    map = L.map('map', { zoomControl: false }).setView([0,0], 2);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
@@ -54,6 +75,9 @@ function initMap() {
         opacity: 0.6,
         dashArray: '5, 10' 
     }).addTo(map);
+    setTimeout(() => {
+        map.invalidateSize();
+    },200);
 }
 
 //intial location
@@ -70,7 +94,7 @@ function showInitialLocation() {
             const currentPos = L.latLng(latitude, longitude);
 
             // Set the map view to the user
-            map.setView(currentPos, 15);
+            map.flyTo(currentPos, 15, { duration: 1.5 });
 
             // Update the marker position
             userMarker.setLatLng(currentPos);
@@ -106,7 +130,12 @@ function handleGeolocationError(error) {
     }
     updateStatus(message, "#e74c3c");
 }
-
+window.addEventListener('offline', () => {
+    updateStatus("You are offline. Some features may not work.", "#e67e22");
+});
+window.addEventListener('online', () => {
+    updateStatus("You are back online.", "#2ecc71");
+});
 //--3.Adress Search Bar
 function enablesearch(){
     const searchbox=document.getElementById('start-input');
@@ -129,7 +158,7 @@ function enablesearch(){
         }
     });
 }
-async function searchplace(query){
+async function searchplace(query,retries=3){
     const dropdown=document.getElementById('suggestions');
     try{
         dropdown.innerHTML='<div class="dropdown-loading">Searching...</div>';
@@ -146,9 +175,16 @@ async function searchplace(query){
     showsuggestions(places);
     }catch(error){
         console.error('Search Error:',error);
+        if(retries>0){
+            console.log(`Retrying search for "${query}". Attempts left: ${retries}`);
+            setTimeout(()=>{
+                searchplace(query,retries-1);
+            },1000);
+        }else{
         dropdown.innerHTML='<div class="dropdown-error"> Search failed.Try Again</div>';
 
     }
+}
 }
 function showsuggestions(places){
     const dropdown=document.getElementById('suggestions');
@@ -237,6 +273,12 @@ async function onmappick(e){
     }
 }
 async function lookupAddress(lat,lng){
+    const now=Date.now();
+    const timeSinceLast= now - geocodeset.lastrequest;
+    if(timeSinceLast < geocodeset.minDelay){
+        await new Promise(resolve => setTimeout(resolve, geocodeset.minDelay - timeSinceLast));
+    }
+    geocodeset.lastrequest=Date.now();
     const url = `${geocodeset.api}/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18`;
     const response = await fetch(url,{
         headers: {'User-Agent':'SentinelGPS/1.0'}});
@@ -251,8 +293,8 @@ function showdestpreview(coords,placeName){
         icon:L.divIcon({
             className:'destination-preview-icon',
             html:"<div class='preview-marker'></div>",
-           iconSize:[12,12],
-           iconAnchor:[6,6]
+           iconSize:[20,20],
+           iconAnchor:[10,10]
         }) }).addTo(map);
         previewmarker.bindPopup(`<div class="preview-popup">
            <strong>Destination</strong><br>
@@ -269,14 +311,23 @@ if(userlastpos){
 
 // --- 4. Activation & Transition Logic ---
 function activateSecurity() {
-    const dashboard = document.querySelector('.dashboard-container');
     if(!chosendest){
-        alert("Please select a destination before starting the tracker.");
+        window.alert("Please select a destination before starting the tracker.");
         return;
     }
+    if(!userlastpos){
+        alert("Please wait for GPS signal before starting the tracker.");
+        return;
+    }
+    startJourney();
+
+}
+
+function startJourney() {
+    const dashboard = document.querySelector('.dashboard-container');
     dashboard.classList.add('activating');
     dashboard.classList.add('active');
-
+    journeyStartTime=Date.now();
     // Removes scanner and fix map after slide finishes
     setTimeout(() => {
         dashboard.classList.remove('activating');
@@ -284,8 +335,6 @@ function activateSecurity() {
         document.getElementById('status').innerText = "MONITORING ENCRYPTED";
         document.getElementById('status').style.color = "#2ecc71";
     }, 1200);
-
-
 
     goalcoord = L.latLng(chosendest.lat, chosendest.lng);
     if(previewmarker){
@@ -309,10 +358,12 @@ function activateSecurity() {
     }
     startGPSMonitoring();
 }
-
-// --- 5. Real-Time GPS Logic ---
+//GPS Logic
 function startGPSMonitoring() {
     if ("geolocation" in navigator) {
+        if('getBattery' in navigator){
+            navigator.getBattery().then(battery=>{
+                const highAccuracy=battery.level >0.2||battery.charging;
         watchId = navigator.geolocation.watchPosition(
             (position) => {
                 const { latitude, longitude, speed } = position.coords;
@@ -320,10 +371,30 @@ function startGPSMonitoring() {
 
                 updateTracker(currentPos, speed);
             },
-            (error) => console.error("GPS Error:", error),
-            { enableHighAccuracy: true }
+            (error) =>{ console.error("GPS Error:", error);
+                        handleGeolocationError(error);},
+            { enableHighAccuracy: highAccuracy,
+                timeout: 10000,
+                maximumAge: highAccuracy?0:5000
+             }
         );
+            });
+        }else{
+            watchId = navigator.geolocation.watchPosition(
+                (position) => {
+                    const { latitude, longitude, speed } = position.coords;
+                    const currentPos = L.latLng(latitude, longitude);
+                    updateTracker(currentPos, speed);
+                },
+                (error) =>{ console.error("GPS Error:", error);
+                            handleGeolocationError(error);},
+                { enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                 }
+            );
     }
+}
 }
 
 // --- 5. Movement & Security Logic ---
@@ -335,42 +406,99 @@ function updateTracker(currentPos, rawSpeed) {
 
     // 2. Update Path
     pathCoordinates.push([currentPos.lat, currentPos.lng]);
+    if(pathCoordinates.length > 1000){
+        pathCoordinates.shift();
+    }
     polyline.setLatLngs(pathCoordinates);
 
     // 3. Center Map (Using panTo for smoother following)
     map.panTo(currentPos, { animate: true, duration: 1.0 });
 
     // 4. Update Stats UI
-    const speedKmh = (rawSpeed || 0) * 3.6;
-    document.getElementById('speed').innerText = speedKmh.toFixed(1) + " km/h";
+    const speedKmh = rawSpeed ? (rawSpeed * 3.6) : 0;
+    document.getElementById('speed').innerText = rawSpeed?speedKmh.toFixed(1) + " km/h":"0.0 km/h";
     document.getElementById('coords').innerText = `${currentPos.lat.toFixed(4)}, ${currentPos.lng.toFixed(4)}`;
 
     if (goalcoord) {
-        const dist = (currentPos.distanceTo(goalcoord) / 1000).toFixed(2);
-        document.getElementById('goaldist').innerText = dist + " km";
-        checkSecurityRisk(currentPos, dist, speedKmh);
+        const dist = (currentPos.distanceTo(goalcoord) / 1000);
+        document.getElementById('goaldist').innerText = dist.toFixed(2) + " km";
+        checkProximity(dist);
+        checkDeviation(currentPos, dist);
+        checkspeed(speedKmh);
+        checkStationary(currentPos);
     }
+    userlastpos= currentPos;
+    if(journeyStartTime){
+        const now=Date.now();
+        if(now - lastsavetime >60000){
+            saveJourneyToStorage();
+            lastsavetime=now;
+        }
+    }
+
 }
 
 // --- 6. Deviation & Risk Detection ---
-function checkSecurityRisk(currentPos, currentDist, speed) {
-    const status = document.getElementById('status');
-    const mode = localStorage.getItem('userTransportMode');
-
-    // Logic: If distance to goal increases significantly
-    if (lastdistanceToGoal !== null && parseFloat(currentDist) > parseFloat(lastdistanceToGoal) + 0.05) {
-        status.innerText = "🚨 DEVIATION DETECTED";
-        status.style.color = "#e74c3c";
+function checkProximity(dist) {
+    if(typeof dist !== 'number'||isNaN(dist)||dist<0){
+        console.error('Invalid distance :', dist);
+        return;
     }
-
-    // Logic: Speed thresholds
-    if (mode === 'walking' && speed > 12) {
-        status.innerText = "⚠️ UNUSUAL SPEED";
-        status.style.color = "#f1c40f";
-    }
-
-    lastdistanceToGoal = currentDist;
+    if (dist <= constants.arrivaldist) {
+        notify("✅ You have arrived at your destination.");
+        document.getElementById('status').innerText = "ARRIVED AT DESTINATION";
+        document.getElementById('status').style.color = "#2ecc71";
+        setTimeout(() => {
+            if(confirm("Journey completed. Do you want to stop tracking?")) {
+                stoptracking();
+            }
+    },2000);
+    } else if (dist <= constants.proximaldist && dist > constants.arrivaldist) {
+        if(!alertShown){
+            notify("⚠️ You are nearing your destination.");
+            alertShown = true;}
+        }
 }
+function checkDeviation(currentPos, currentDist) {
+    const mode=localStorage.getItem('userTransportMode');
+    let deviationThreshold= constants.deviationdist;
+    if(mode==='car'){deviationThreshold=0.1;}
+    else if(mode==='train'){deviationThreshold=0.2;}
+    if(lastdistanceToGoal!=null){
+        const distIncrease=(currentDist - lastdistanceToGoal);
+        if(distIncrease > deviationThreshold){
+            showalert("deviation","🚨 Route Deviation Detected!",`You have deviated from your planned route by ${distIncrease.toFixed(2)} km.`);
+        }else if(distIncrease < -deviationThreshold){
+            clearAlertStatus();
+        }
+    }
+    lastdistanceToGoal=currentDist;
+}
+function checkspeed(speed) {
+    const mode = localStorage.getItem('userTransportMode');
+    const thresholds = constants.speedthresholds[mode] || constants.speedthresholds.walking;
+    if(speed > thresholds){
+        showalert("speed","⚠️ Unusual Speed Detected!",`Your speed of ${speed.toFixed(1)} km/h exceeds typical ${mode} speed.`);
+    }
+}
+function checkStationary(currentPos) {
+    if(!userlastpos) return;
+    const distMoved= currentPos.distanceTo(userlastpos)/1000;
+    if(distMoved< constants.movementspeed){
+    if(!stationaryStartTime){
+        stationaryStartTime=Date.now();
+    }
+    else{
+        const stationaryperiod=Date.now() - stationaryStartTime;
+        if(stationaryperiod>constants.stationary_time){
+            showalert("stationary","⚠️ Prolonged Stationary Detected!","You have been stationary for over 5 minutes.");
+            stationaryStartTime=Date.now();
+        }
+    }}else{
+        stationaryStartTime=null;
+    }
+}
+
 
 // Helper fn
 function moveMarker(marker, startLatLng, endLatLng, duration) {
@@ -396,7 +524,25 @@ function startbutton() {
     btn.disabled = false;
     btn.style.opacity = '1';
 }
-
+function showalert(type,title,message){
+    const status=document.getElementById('status');
+    status.innerText=title;
+    if(type==="deviation"){
+        status.style.color="#e74c3c";
+    }else if(type==="speed"||type==="stationary"){
+        status.style.color="#f1c40f";
+    }
+    if("Notification" in window && Notification.permission === "granted") {
+        new Notification("Sentinel GPS", { body: message });
+    }
+}
+function clearAlertStatus() {
+    const status = document.getElementById('status');
+   if (status.style.color !== "#2ecc71") {
+        status.innerText = "MONITORING ACTIVE";
+        status.style.color = "#2ecc71";
+    }
+}
 function notify(message) {
     console.log(message);
     if ("Notification" in window && Notification.permission === "granted") {
@@ -410,3 +556,88 @@ function showError(message) {
     if("Notification" in window&& Notification.permission == "default"){
         Notification.requestPermission();
     }
+
+//journey stop
+function stoptracking(){
+    if(watchId){
+        navigator.geolocation.clearWatch(watchId);
+        watchId=null;
+    }
+    if(stationaryTimer){
+        clearTimeout(stationaryTimer);
+        stationaryTimer=null;
+    }
+    saveJourneyToHistory();
+    localStorage.removeItem('activeJourney');
+    window.location.href='index.html';
+}
+function saveJourneyToStorage(){
+    try{
+    const journeyData={
+        startTime:journeyStartTime,
+        destination:goalcoord?{lat:goalcoord.lat,lng:goalcoord.lng}:null,
+        path:pathCoordinates,
+        mode:localStorage.getItem('userTransportMode'),
+        lastUpdated:Date.now()
+    };
+    localStorage.setItem('activeJourney',JSON.stringify(journeyData));
+}catch(error){
+    console.error('Failed to save journey:',error);
+}
+}
+function loadJourneyFromStorage(){
+    const saved= localStorage.getItem('activeJourney');
+    if(!saved) return false;
+    try{
+        const data=JSON.parse(saved);
+        if(Date.now()-data.lastUpdated > 24*60*60*1000){
+            localStorage.removeItem('activeJourney');
+            return false;
+        }
+        if(data.destination){
+            goalcoord=L.latLng(data.destination.lat,data.destination.lng);
+            pathCoordinates=data.path||[];
+            journeyStartTime=data.startTime;
+            if(goalMarker)map.removeLayer(goalMarker);
+            goalMarker=L.marker(goalcoord).addTo(map).bindPopup("Destination");
+            polyline.setLatLngs(pathCoordinates);
+            startGPSMonitoring();
+            document.getElementById('status').innerText="Journey Resumed";
+            document.getElementById('status').style.color="#2ecc71";
+        }
+    }catch(error){
+        console.error('Failed to load journey:',error);
+        localStorage.removeItem('activeJourney');
+    }
+    }
+    function saveJourneyToHistory(){
+        if(!goalcoord || pathCoordinates.length===0) return;
+        try{
+        const journey={
+            id:Date.now(),
+            mode:localStorage.getItem('userTransportMode'),
+            startTime:journeyStartTime,
+            endTime:Date.now(),
+            destination:{lat:goalcoord.lat,lng:goalcoord.lng},
+            path:pathCoordinates,
+            distance:calculateTotalDistance(),
+            duration:Date.now()-journeyStartTime
+        };
+        let history=JSON.parse(localStorage.getItem('journeyHistory'))||[];
+        history.unshift(journey);
+        if(history.length>50)history= history.slice(0,50)
+        localStorage.setItem('journeyHistory',JSON.stringify(history));
+    }catch(error){
+        console.error('Failed to save journey history:',error);
+    }
+    }
+    function calculateTotalDistance(){
+        let total=0;
+        for(let i=1;i<pathCoordinates.length;i++){
+            const prev=L.latLng(pathCoordinates[i-1][0],pathCoordinates[i-1][1]);
+            const curr=L.latLng(pathCoordinates[i][0],pathCoordinates[i][1]);
+            total+=prev.distanceTo(curr);
+        }
+        return (total/1000).toFixed(2);
+    }
+    
