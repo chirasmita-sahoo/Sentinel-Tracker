@@ -15,6 +15,11 @@ let alertShown=false;
 let stationaryStartTime = null;
 let stationaryTimer = null;
 let journeyStartTime = null;
+
+let alertTimer=null;
+let alerttimeremaining=120;
+let currentalerttype=null;
+let alertshownfor={};
 //CONFIGURATION
 const geocodeset={
     api:'https://nominatim.openstreetmap.org',
@@ -316,7 +321,7 @@ function activateSecurity() {
         return;
     }
     if(!userlastpos){
-        alert("Please wait for GPS signal before starting the tracker.");
+        window.alert("Please wait for GPS signal before starting the tracker.");
         return;
     }
     startJourney();
@@ -332,7 +337,7 @@ function startJourney() {
     setTimeout(() => {
         dashboard.classList.remove('activating');
         map.invalidateSize(); 
-        document.getElementById('status').innerText = "MONITORING ENCRYPTED";
+        document.getElementById('status').innerText = "Journey started";
         document.getElementById('status').style.color = "#2ecc71";
     }, 1200);
 
@@ -525,15 +530,22 @@ function startbutton() {
     btn.style.opacity = '1';
 }
 function showalert(type,title,message){
+    if(alertshownfor[type]&&Date.now()-alertshownfor[type]<60000){
+        return;
+    }
     const status=document.getElementById('status');
     status.innerText=title;
-    if(type==="deviation"){
-        status.style.color="#e74c3c";
-    }else if(type==="speed"||type==="stationary"){
-        status.style.color="#f1c40f";
+    status.style.color = type === "deviation" ? "#e74c3c" : "#f1c40f";
+    if (type === "deviation" || type === "stationary") {
+        alertmodal(type, title, message);
+        alertshownfor[type] = Date.now();
     }
     if("Notification" in window && Notification.permission === "granted") {
-        new Notification("Sentinel GPS", { body: message });
+        new Notification("Sentinel GPS", { 
+            body: message,
+             icon:'/favicon.ico',
+            badge:'/favicon.ico',
+            vibrate:[200,100,200] });
     }
 }
 function clearAlertStatus() {
@@ -551,7 +563,7 @@ function notify(message) {
 }
 
 function showError(message) {
-    alert("⚠️"+message);}
+    window.alert("⚠️"+message);}
 
     if("Notification" in window&& Notification.permission == "default"){
         Notification.requestPermission();
@@ -641,3 +653,157 @@ function loadJourneyFromStorage(){
         return (total/1000).toFixed(2);
     }
     
+    //alert modal
+    function alertmodal(type,title,message){
+      currentalerttype=type;
+      const modal=document.getElementById('alert-modal');
+      const icon=document.getElementById('modal-icon');
+      document.getElementById('alert-title').innerText=title;
+      document.getElementById('alert-message').innerText=message;
+      if(type==="deviation"){
+        icon.innerText="🚨";
+      }
+      else if(type==="stationary"){
+        icon.innerText="⏱️";
+      }
+      else if(type==="speed"){
+        icon.innerText="⚡";
+      }
+      modal.classList.remove('hidden');
+      startalertcountdown();
+      alertSound();
+    }
+    function startalertcountdown(){
+        alerttimeremaining=120;
+        if(alertTimer){
+            clearInterval(alertTimer);
+        }
+        alertTimer=setInterval(()=>{
+            alerttimeremaining--;
+            const minute=Math.floor(alerttimeremaining/60);
+            const seconds=alerttimeremaining%60;
+            document.getElementById('countdown').innerText=`${minute}:${seconds.toString().padStart(2, '0')}`;
+            const progress= (alerttimeremaining/120)*100;
+            document.getElementById('timer-progress').style.width=progress+'%';
+            const progressbar=document.getElementById('timer-progress');
+            if(alerttimeremaining<=30){
+                progressbar.style.background="#e74c3c";
+                progressbar.style.boxShadow='0 0 10px rgba(231, 76, 60, 0.8)';
+            }else if(alerttimeremaining<=60){
+                progressbar.style.background = '#f1c40f';
+            progressbar.style.boxShadow = '0 0 10px rgba(241, 196, 15, 0.6)';
+            }
+            if(alerttimeremaining<=0){
+                escalateAlert();
+            }},1000);
+
+        }
+    function alertresponse(response){
+        clearInterval(alertTimer);
+        const modal=document.getElementById('alert-modal');
+        modal.classList.add('hidden');
+        const responsedata={
+            timestamp: Date.now(),
+        alertType: currentalerttype,
+        response: response,
+        location: userlastpos ? {
+            lat: userlastpos.lat,
+            lng: userlastpos.lng
+        } : null
+        };
+        let alerthistory=JSON.parse(localStorage.getItem('alerthistory') || '[]');
+        alerthistory.unshift(responsedata);
+        if(alerthistory.length>50)alerthistory=alerthistory.slice(0,50);
+        localStorage.setItem('alerthistory',JSON.stringify(alertHistory));
+        if(response==='safe'){
+            document.getElementById('status').innerText = "✅ User confirmed safe";
+        document.getElementById('status').style.color = "#2ecc71";
+        delete alertshownfor[currentalerttype];
+        }else if(response==='help'){
+            document.getElementById('status').innerText="🆘 EMERGENCY!!";
+            document.getElementById('status').style.color = "#e74c3c";
+            sendEmergencyAlert();
+        }else if(response==='snooze'){
+            document.getElementById('status').innerText = "Journey Ongoing";
+        document.getElementById('status').style.color = "#2ecc71";
+        delete alertshownfor[currentalerttype];
+        }
+        setTimeout(()=>{
+            if(goalcoord){
+                document.getElementById('status').innerText="Journey Ongoing";
+                document.getElementById('status').style.color = "#2ecc71";
+        }
+            },5000);
+        }
+    function escalateAlert(){
+        clearInterval(alertTimer);
+        const modal= document.getElementById('alert-modal');
+        modal.classList.add('hidden');
+        document.getElementById('status').innerText="🚨 ALERT ESCALATED - NO RESPONSE";
+        document.getElementById('status').style.color = "#e74c3c";
+        const escalationData = {
+        timestamp: Date.now(),
+        alertType: currentalerttype,
+        response: 'ESCALATED',
+        location: userlastpos ? {
+            lat: userlastpos.lat,
+            lng: userlastpos.lng
+        } : null
+    };
+    let alertHistory=JSON.parse(localStorage.getItem('alertHistory') || '[]');
+    alertHistory.unshift(escalationData);
+    if(alertHistory.length>50)alertHistory=alertHistory.slice(0,50);
+    localStorage.setItem('alertHistory',JSON.stringify(alertHistory));
+    console.warn("⚠️ ALERT ESCALATED - No user response after 2 minutes!");
+    if ("Notification" in window && Notification.permission === "granted") {
+        new Notification("🚨 Sentinel GPS - ALERT ESCALATED", { 
+            body: "No response received. Alert has been escalated.",
+            requireInteraction: true,
+            vibrate:[500,200,500]
+        });
+    }}
+    function alertSound(){
+        try{
+            const audioContext=new(window.AudioContext||window.webkitAudioContext)();
+            for(let i=0;i<3;i++){
+                setTimeout(()=>{
+                    const oscillator=audioContext.createOscillator();
+                    const gainNode=audioContext.createGain();
+                    oscillator.connect(gainNode);
+                    gainNode.connect(audioContext.destination);
+                    oscillator.frequency.value=800;
+                    oscillator.type='sine';
+                    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+                    oscillator.start(audioContext.currentTime);
+                    oscillator.stop(audioContext.currentTime + 0.3);},i*400);
+                   
+            }
+            }
+           catch(error){
+                console.error('Audio API error:', error);
+            }
+    }
+    function sendEmergencyAlert(){
+        window.alert("🆘 EMERGENCY ALERT ACTIVATED!");
+        console.error("🚨 EMERGENCY ALERT ACTIVATED at", new Date().toISOString());
+        if('vibrate'in navigator){
+            navigator.vibrate([200,100,200,100,200,100,200]);
+        }
+        try{
+            const emergencyData = {
+            timestamp: Date.now(),
+            type: 'EMERGENCY_BUTTON',
+            location: userlastpos ? {
+                lat: userlastpos.lat,
+                lng: userlastpos.lng
+            } : null,
+            alertType: currentalerttype
+        };
+        let emergency=JSON.parse(localStorage.getItem('emergencyEvents') || '[]');
+        emergency.unshift(emergencyData);
+        if (emergency.length > 20) emergency = emergency.slice(0, 20);
+        localStorage.setItem('emergencyEvents', JSON.stringify(emergency));
+    }catch(error){console.error('Failed to save emergency event:', error);}
+
+    }

@@ -212,3 +212,195 @@ input {
     text-shadow: 0 0 5px rgba(52, 152, 219, 0.5);
     letter-spacing: 1px;
 }
+/*--Alert Modal Styles--*/
+.modal{
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+    backdrop-filter: blur(15px);
+    animation: fadeIn 0.3s ease;
+}
+.modal.hidden{
+    display: none;
+}
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+.modal-content{
+    background: linear-gradient(145deg, rgba(15, 20, 50, 0.98), rgba(10, 15, 35, 0.98));
+    border: 2px solid #e74c3c;
+    border-radius: 25px;
+    padding: 40px 30px;
+    max-width: 450px;
+    width: 90%;
+    text-align: center;
+    box-shadow: 
+        0 0 60px rgba(231, 76, 60, 0.6),
+        0 20px 80px rgba(0, 0, 0, 0.5);
+    animation: slideIn 0.4s ease, shake 0.6s;
+    position: relative;
+}
+@keyframes slideIn {
+    from { transform: translateY(-50px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+    20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
+.modal-icon{
+    font-size: 4rem;
+    margin-bottom: 15px;
+    animation: pulse 1.5s infinite;
+}
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+.modal-content h2{
+   color: #e74c3c;
+    margin-bottom: 15px;
+    font-size: 1.8rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+.modal-content p{
+    color: #fff;
+    font-size: 1.1rem;
+    margin-bottom: 20px;
+    line-height: 1.6;
+}
+.alert-timer{
+    margin: 25px 0;
+    padding: 20px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 15px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.timer-text{
+    font-size: 1rem;
+    color: #3498db;
+    margin-bottom: 8px;
+    font-weight: bold;
+}
+#countdown{
+    font-size:1.8rem;
+    color:e74c3c;
+    font-family:'Courier New', monospace;
+    font-weight:bold;
+}
+.timer-bar{
+    width: 100%;
+    height: 10px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-top: 15px;
+    box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+#timer-progress{
+     height: 100%;
+    background: linear-gradient(90deg, #2ecc71, #f1c40f 50%, #e74c3c);
+    width: 100%;
+    transition: width 1s linear;
+    box-shadow: 0 0 10px rgba(46, 204, 113, 0.5);
+}
+.alert-actions{
+    display: grid;
+    gap: 12px;
+    margin-top: 25px;
+}
+.alert-actions button{
+    padding: 16px 20px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.btn-icon{
+    font-size:1.5rem;
+}
+.btn-safe{
+    background:linear-gradient(135deg, #2ecc71, #27ae60);
+    color:white;
+    box-shadow:0 5px 15px rgba(46, 204, 113, 0.4);
+}
+.btn-safe:hover{
+    transform:translateY(-2px);
+    box-shadow:0 8px 20px rgba(46, 204, 113, 0.6);
+}
+.btn-safe:active{
+    transform:translateY(0);
+}
+.btn-help{
+    background:linear-gradient(135deg, #e74c3c, #c0392b);
+    color:white;
+    box-shadow:0 5px 15px rgba(231, 76, 60, 0.4);
+    animation: helpPulse 2s infinite;
+}
+@keyframes helpPulse {
+   0%, 100% { box-shadow: 0 5px 15px rgba(231, 76, 60, 0.4); }
+    50% { box-shadow: 0 5px 25px rgba(231, 76, 60, 0.8); }
+}
+.btn-help:hover{
+    transform:translateY(-2px);
+    box-shadow:0 8px 20px rgba(231, 76, 60, 0.6);
+}
+.btn-help:active{
+    transform:translateY(0);
+}
+.btn-snooze{
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+.btn-snooze:hover{
+    background: rgba(255, 255, 255, 0.15);
+    transform:translateY(-2px);
+    box-shadow:0 8px 20px rgba(255, 255, 255, 0.1);
+}
+.btn-snooze:active{
+    transform:translateY(0);
+}
+.modal-note{
+    margin-top: 20px;
+    font-size: 0.85rem;
+    color: #95a5a6;
+    font-style: italic;
+}
+@media(max-width:500px){
+    .modal-content{
+        padding:30px 20px;
+        max-width:95%;
+    }
+    .modal-icon {
+        font-size: 3rem;
+    }
+    
+    .modal-content h2 {
+        font-size: 1.4rem;
+    }
+    
+    .alert-actions button {
+        padding: 14px 16px;
+        font-size: 1rem;
+    }
+}

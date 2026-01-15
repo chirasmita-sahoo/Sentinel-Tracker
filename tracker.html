@@ -60,7 +60,34 @@
             </div>
         </main>
     </div>
-
+    <div id="alert-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-icon" id="modal-icon">🚨</div>
+            <h2 id="alert-title">Security Alert</h2>
+            <p id="alert-message"></p>
+            <div class="alert-timer">
+                <p class="timer-text">Auto dismiss: <span id="countdown">2:00</span></p>
+                <div class="timer-bar">
+                    <div id="timer-progress"></div>
+                </div>
+            </div>
+            <div class="alert-actions">
+                <button class="btn-safe" onclick="alertresponse('safe')">
+                    <span class="btn-icon">✅</span>
+                    <span>I'm Safe</span>
+                    </button>
+                <button class="btn-help" onclick="alertresponse('help')">
+                    <span class="btn-icon">🆘</span>
+                    <span>Need Help</span>
+                </button>
+                <button class="btn-snooze" onclick="alertresponse('snooze')">
+                    <span class="btn-icon">⏰</span>
+                    <span>False Alert</span>
+                </button>
+            </div>
+            <p class="modal-note">No response will escalate the alert automatically.</p>
+     </div>
+    </div>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
     <script src="tracker.js"></script>
