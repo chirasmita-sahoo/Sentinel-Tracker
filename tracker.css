@@ -5,19 +5,21 @@
     box-sizing: border-box;
     font-family: 'Segoe UI', Roboto, sans-serif;
 }
+html, body {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+}
 
 body {
     background-color: #060a3a;
     color: white;
-    overflow: hidden;
-    height: 100vh;
-    width: 100vw;
 }
 
 .dashboard-container {
     display: flex;
     width: 100%;
-    height: 100%;
+    height: 100vh;
 }
 
 /* --- Sidebar (Control Panel) --- */
@@ -37,9 +39,10 @@ body {
 /* --- Map Section --- */
 #map {
     width: 50%; /* Initial State */
-    height: 100%;
+    height: 100vh;
     position: relative;
     transition: all 0.8s cubic-bezier(0.65, 0, 0.35, 1);
+    z-index: 1;
 }
 
 /* --- TRANSFORMATION: ACTIVE STATE --- */

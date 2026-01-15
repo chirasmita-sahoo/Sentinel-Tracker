@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
     <link rel="stylesheet" href="tracker.css">
+    <link rel="stylesheet" href="address.css">
 </head>
 <body>
 
@@ -20,11 +21,14 @@
 
             <div class="input-section">
                 <label>Target Destination</label>
-                <input type="text" id="end-input" placeholder="Latitude, Longitude">
-                <p style="font-size: 0.7rem; color: #666; margin-top: -10px;">
-                    Example: 12.9810, 77.6400
-                </p>
-                <button id="start-btn" onclick="activateSecurity()">INITIALIZE PROTOCOL</button>
+                <div class="search-wrapper">
+                     <input type="text" id="start-input" placeholder="Search address" autocomplete="off">
+                     <span class="search-icon">🔍</span>
+                     <div id="suggestions" class="dropdown"></div>
+                </div>
+                <button id="map-select-btn" class="map-btn">SELECT ON MAP</button>
+                <p class="input-hint">Type an address or click SELECT ON MAP</p>
+                <button id="start-btn" onclick="activateSecurity()">Start Journey</button>
             </div>
 
             <div class="stats-panel">
@@ -37,7 +41,7 @@
                     <p id="speed">0.0 km/h</p>
                 </div>
                 <div class="stat-item">
-                    <small>Distance to Objective</small>
+                    <small>Distance to Goal</small>
                     <p id="goaldist">-- km</p>
                 </div>
                 <div class="stat-item">
@@ -46,7 +50,7 @@
                 </div>
             </div>
 
-            <button class="stop-btn" onclick="window.location.href='index.html'">TERMINATE SESSION</button>
+            <button class="stop-btn" onclick="window.location.href='index.html'">END SESSION</button>
         </aside>
 
         <main id="map">
