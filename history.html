@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Journey History</title>
+    <link rel="stylesheet" href="index.css">
+    <link rel="stylesheet" href="history.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+</head>
+
+<body>
+    <div class="history-container">
+        <header class="history-header">
+            <button onclick="goBack()" class="back-btn" aria-label="Go back to home"> ← Back</button>
+            <h1>📊 Journey History</h1>
+            <button onclick="clearAllHistory()" class="clear-btn" aria-label="Clear all history">🗑️ Clear</button>
+        </header>
+        <section class="stats-overview" aria-label="Journey stas">
+            <div class="stat-card" data-stat="journeys">
+                <div class="stat-icon">🗺️</div>
+                <div class="stat-value" id="total-journeys">0</div>
+                <div class="stat-label">Total Journeys</div>
+            </div>
+            <div class="stat-card" data-stat="distance">
+                <div class="stat-icon">📍</div>
+                <div class="stat-value" id="total-distance">0</div>
+                <div class="stat-label">Total km</div>
+            </div>
+            <div class="stat-card" data-stat="time">
+                <div class="stat-icon">⏱️</div>
+                <div class="stat-value" id="total-time">0</div>
+                <div class="stat-label">Total Hours</div>
+            </div>
+        </section>
+        <section class="journey-list" id="history-list" aria-label="Journey history list"></section>
+        <div id="loading-indicator" class="loading hidden">
+            <div class="spinner"></div>
+            <p>Loading journeys...</p>
+        </div>
+    </div>
+    <script src="history.js"></script>
+</body>
+
+</html>
