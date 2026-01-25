@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentinel GPS - Dashboard</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+    <script src="js/firebase-config.js"></script>
+    <script src="js/firebase-init.js"></script>
+    <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+    <div class="dashboard-wrapper">
+        <div class="dashboard-header glass-card">
+            <div class="header-left">
+                <h1>🛡️ Sentinel GPS</h1>
+            </div>
+            <div class="header-right">
+                <span class="user-email" id="user-email">Loading...</span>
+                <button class="logout-btn" onclick="handleLogout()">
+                    <span class="logout-icon">🚪</span>
+                    <span class="logout-text">Logout</span>
+                </button>
+            </div>
+        </div>
+        <div class="dashboard-content">
+            <div class="welcome-section glass-card">
+                <h2>Welcome Back, <span id="display-name" class="highlight-name">User</span>! 👋</h2>
+                <p class="welcome-subtitle">Ready to track your journey? Select a transportation mode to begin.</p>
+                <div class="pulse-line"></div>
+            </div>
+
+            <div class="section-title">
+                <h3>🚀 Start New Journey</h3>
+                <p>Select your mode of transportation</p>
+            </div>
+
+            <div class="mode-grid">
+                <div class="mode-card glass-card" onclick="selectMode('walking')">
+                    <div class="mode-icon">🚶</div>
+                    <h3>Walking</h3>
+                    <p>Perfect for pedestrian journeys</p>
+                    <div class="mode-stats">
+                        <span class="stat-badge">Max Speed: 6 km/h</span>
+                    </div>
+                    <div class="mode-hover-effect">Start Walking →</div>
+                </div>
+
+                <div class="mode-card glass-card" onclick="selectMode('car')">
+                    <div class="mode-icon">🚗</div>
+                    <h3>Car / Bike</h3>
+                    <p>Ideal for road travel</p>
+                    <div class="mode-stats">
+                        <span class="stat-badge">Max Speed: 120 km/h</span>
+                    </div>
+                    <div class="mode-hover-effect">Start Driving →</div>
+                </div>
+
+                <div class="mode-card glass-card" onclick="selectMode('train')">
+                    <div class="mode-icon">🚆</div>
+                    <h3>Train / Bus</h3>
+                    <p>Great for public transport</p>
+                    <div class="mode-stats">
+                        <span class="stat-badge">Max Speed: 150 km/h</span>
+                    </div>
+                    <div class="mode-hover-effect">Start Journey →</div>
+                </div>
+            </div>
+            <div class="section-title">
+                <h3>⚡ Quick Actions</h3>
+                <p>Manage your safety features</p>
+            </div>
+
+            <div class="quick-actions">
+                <div class="action-card glass-card active" onclick="goToHistory()">
+                    <div class="action-icon">📊</div>
+                    <div class="action-content">
+                        <h4>Journey History</h4>
+                        <p>View all your past journeys</p>
+                    </div>
+                    <div class="action-arrow">→</div>
+                </div>
+                <div class="action-card glass-card coming-soon" onclick="showComingSoon('Emergency Contacts')">
+                    <div class="action-icon">👥</div>
+                    <div class="action-content">
+                        <h4>Emergency Contacts</h4>
+                        <p>Manage your trusted contacts</p>
+                    </div>
+                    <div class="coming-soon-badge">Phase 3</div>
+                </div>
+                <div class="action-card glass-card coming-soon" onclick="showComingSoon('Journey Sharing')">
+                    <div class="action-icon">🔗</div>
+                    <div class="action-content">
+                        <h4>Share Journey</h4>
+                        <p>Share live location with contacts</p>
+                    </div>
+                    <div class="coming-soon-badge">Phase 4</div>
+                </div>
+
+                <div class="action-card glass-card coming-soon" onclick="showComingSoon('Alert Settings')">
+                    <div class="action-icon">⚙️</div>
+                    <div class="action-content">
+                        <h4>Alert Settings</h4>
+                        <p>Customize your safety alerts</p>
+                    </div>
+                    <div class="coming-soon-badge">Phase 5</div>
+                </div>
+            </div>
+            <div class="section-title">
+                <h3>📈 Your Statistics</h3>
+                <p>Your journey data at a glance</p>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card glass-card">
+                    <div class="stat-icon">🗺️</div>
+                    <div class="stat-number" id="total-journeys">0</div>
+                    <div class="stat-label">Total Journeys</div>
+                </div>
+
+                <div class="stat-card glass-card">
+                    <div class="stat-icon">📏</div>
+                    <div class="stat-number" id="total-distance">0 km</div>
+                    <div class="stat-label">Distance Traveled</div>
+                </div>
+
+                <div class="stat-card glass-card">
+                    <div class="stat-icon">⏱️</div>
+                    <div class="stat-number" id="total-time">0h 0m</div>
+                    <div class="stat-label">Time Tracked</div>
+                </div>
+
+                <div class="stat-card glass-card">
+                    <div class="stat-icon">🚨</div>
+                    <div class="stat-number" id="total-alerts">0</div>
+                    <div class="stat-label">Safety Alerts</div>
+                </div>
+            </div>
+            <div class="info-banner glass-card">
+                <div class="info-icon">💡</div>
+                <div class="info-content">
+                    <h4>Pro Tip</h4>
+                    <p>Always add emergency contacts before starting a journey for maximum safety!</p>
+                </div>
+            </div>
+        </div>
+        <div class="dashboard-footer">
+            <p>Encrypted End-to-End </p>
+        </div>
+    </div>
+    <script src="dashboard.js"></script>
+
+</body>
+</html>
