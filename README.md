@@ -3,7 +3,7 @@
 Sentinel is a geo-spatial safety application designed for solo travelers. It provides high-tech monitoring through real-time GPS tracking, path visualization, and anomaly detection to ensure users stay on their intended route.
 
 ## 🚀 Live Demo
-**[https://chirasmita-sahoo.github.io/Sentinel-Tracker/]
+**[https://sentinelgps-tracker.web.app/]
 
 ## ✨ Current Features
 * **Dynamic UI State Management:** Seamless transition from a setup mode to an active monitoring dashboard using CSS3 transitions.
