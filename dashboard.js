@@ -17,37 +17,36 @@ function loadUserData(user) {
     loadStats();
 }
 
-function loadStats() {
-    const journeys = JSON.parse(localStorage.getItem('journeyHistory')) || [];
-    
-    let totalDistance = 0;
-    let totalDuration = 0;
-    let totalAlerts = 0;
+async function loadStats() {
+   try {
+        const stats = await JourneyDB.getStats();
+        
+        document.getElementById('total-journeys').textContent = stats.totalJourneys;
+        document.getElementById('total-distance').textContent = stats.totalDistance.toFixed(1) + ' km';
 
-    journeys.forEach(journey => {
-        if (journey.distance) {
-            totalDistance += journey.distance;
-        }
-        if (journey.duration) {
-            totalDuration += journey.duration;
-        }
-        if (journey.alerts) {
-            totalAlerts += journey.alerts.length || 0;
-        }
-    });
-    document.getElementById('total-journeys').textContent = journeys.length;
-    document.getElementById('total-distance').textContent = totalDistance.toFixed(1) + ' km';
-    
-    const hours = Math.floor(totalDuration / 3600);
-    const minutes = Math.floor((totalDuration % 3600) / 60);
-    document.getElementById('total-time').textContent = `${hours}h ${minutes}m`;
-    
-    document.getElementById('total-alerts').textContent = totalAlerts;
-
-    console.log(`📊 Stats loaded: ${journeys.length} journeys, ${totalDistance.toFixed(1)} km`);
+        const totalSeconds = Math.floor(stats.totalDuration / 1000);
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        document.getElementById('total-time').textContent = `${hours}h ${minutes}m`;
+        
+        document.getElementById('total-alerts').textContent = stats.totalAlerts;
+        
+    } catch (error) {
+        console.error('Error loading stats:', error);
+        document.getElementById('total-journeys').textContent = '0';
+        document.getElementById('total-distance').textContent = '0.0 km';
+        document.getElementById('total-time').textContent = '0h 0m';
+        document.getElementById('total-alerts').textContent = '0';
+    }
 }
 
-function selectMode(mode) {
+async function selectMode(mode) {
+    const active = await JourneyDB.checkActiveJourney();
+    if (active) {
+        alert("You have an active journey on another device. Please end it first.");
+        window.location.href = 'tracker.html';
+        return;
+    }
     localStorage.setItem('userTransportMode', mode);
     const modeNames = {
         'walking': 'Walking',
@@ -61,7 +60,9 @@ function selectMode(mode) {
 function goToHistory() {
     window.location.href = 'history.html';
 }
-
+function goToContacts(){
+    window.location.href = 'contacts.html';
+}
 async function handleLogout() {
     if (confirm('Are you sure you want to logout?')) {
         try {
