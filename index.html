@@ -11,7 +11,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
     <script src="js/firebase-config.js"></script>
     <script src="js/firebase-init.js"></script>  
-   
+   <script src="js/database.js"></script>
     <link rel="stylesheet" href="index.css">
 </head>
 <body>
@@ -60,9 +60,9 @@
                     <h3>Welcome back, <span id="user-name">User</span>! 👋</h3>
                     <p>Ready to start tracking?</p>
                 </div>
-                <button onclick="dashboard.html" class="primary-cta">
+                <a href="dashboard.html" class="primary-cta">
                     🏠 Go to Dashboard
-                </button>
+                </a>
                 <button onclick="handleLogout()" class="logout-cta">
                     🚪 Logout
                 </button>

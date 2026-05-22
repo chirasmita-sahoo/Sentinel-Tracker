@@ -11,20 +11,26 @@ const CONFIG = {
 let calculationTimeout = null;
 
 
-window.addEventListener('load', () => {
-    showLoadingIndicator();
-
-    setTimeout(() => {
-        loadHistory();
+firebase.auth().onAuthStateChanged(async (user) => {
+    if (user) {
+        showLoadingIndicator();
+        await loadHistory();
+        
+        if (navigator.onLine && typeof OfflineSync !== 'undefined') {
+            await OfflineSync.autoSync();
+            await loadHistory(); 
+        }
         hideLoadingIndicator();
-    }, CONFIG.LOAD_DELAY);
+    } else {
+        window.location.href = 'auth.html';
+    }
 });
 
 // MAIN FUNCTIONS
 
-function loadHistory() {
+async function loadHistory() {
     try {
-        const history = getJourneyHistory();
+        const history =await getJourneyHistory();
         const container = document.getElementById('history-list');
 
         if (!container) {
@@ -43,35 +49,64 @@ function loadHistory() {
 
     } catch (error) {
         console.error('Failed to load journey history:', error);
+        console.error('Error stack:', error.stack);
         displayErrorState();
     }
 }
 
-function getJourneyHistory() {
+async function getJourneyHistory() {
     try {
-        const data = localStorage.getItem(CONFIG.STORAGE_KEY);
-
-        if (!data) {
-            return [];
+        let history = [];
+        
+        // Try to load from Firestore (cloud) first
+        if (navigator.onLine && typeof JourneyDB !== 'undefined') {
+            try {
+                history = await JourneyDB.getUserJourneys();
+                console.log(`Loaded ${history.length} journeys from cloud`);
+            } catch (error) {
+                console.error('Error loading from Firestore:', error);
+                console.error('Full error:', error.message, error.code);
+                const data = localStorage.getItem(CONFIG.STORAGE_KEY);
+                if (data) {
+                    history = JSON.parse(data);
+                    console.log('Loaded from localStorage (fallback)');
+                }else{
+                    console.log('No localStorage data found');
+                }
+            }
+        } else {
+            console.log('Offline or JourneyDB not available');
+            const data = localStorage.getItem(CONFIG.STORAGE_KEY);
+            if (data) {
+                history = JSON.parse(data);
+                console.log('Loaded from localStorage (offline)');
+            }else {
+                console.log('No localStorage data found');
+            }
         }
-        const history = JSON.parse(data);
 
         if (!Array.isArray(history)) {
             console.warn('Journey history is not an array, resetting');
             return [];
         }
-
-        return history.filter(journey => {
-            return journey &&
+        const filtered=history.filter(journey => {
+            const valid = journey &&
                 typeof journey === 'object' &&
-                journey.id &&
                 journey.mode &&
                 typeof journey.mode === 'string' &&
                 journey.startTime;
+                if (!valid) {
+                console.warn('Invalid journey filtered out:', journey);
+            }
+            
+            return valid;
         });
-
+        console.log(`Returning ${filtered.length} valid journeys`);
+        return filtered;
+    
     } catch (error) {
-        console.error('Failed to parse journey history:', error);
+        console.error('Failed to load journey history:', error);
+        console.error('Error stack:', error.stack);
         return [];
     }
 }
@@ -100,10 +135,14 @@ function createJourneyCard(journey) {
     card.className = 'journey-card';
     card.setAttribute('data-journey-id', journey.id);
 
-    const date = new Date(journey.startTime);
+    const date = journey.startTime instanceof Date 
+        ? journey.startTime 
+        : new Date(journey.startTime);
     const duration = calculateDuration(journey.duration);
     const avgSpeed = calculateAverageSpeed(journey.distance, journey.duration);
-    const pathPoints = journey.path ? journey.path.length : 0;
+    const pathPoints = journey.pathPoints 
+        ? journey.pathPoints.length 
+        : (journey.path ? journey.path.length : 0);
 
     card.innerHTML = `
         <div class="journey-header">
@@ -137,12 +176,14 @@ function createJourneyCard(journey) {
 }
 
 function displayEmptyState(container) {
+    const offlineMessage = !navigator.onLine ? '<p style="color: #f39c12; margin-top: 10px;">📴 You are offline. Journeys will appear when online.</p>' : '';
     container.innerHTML = `
         <div class="no-history">
             <div class="no-history-icon">📭</div>
             <h2>No Journey History Yet</h2>
             <p>Your completed journeys will appear here.<br>
             Start your first journey to build your travel history!</p>
+            ${offlineMessage}
         </div>
     `;
 }
@@ -283,20 +324,36 @@ function calculateAverageSpeed(distance, durationMs) {
 
 
 
-function clearAllHistory() {
+async function clearAllHistory() {
     const confirmed = window.confirm(
         'Are you sure you want to clear all journey history?\n\n' +
-        'This action cannot be undone and will permanently delete all your journey records.'
+        'This action cannot be undone and will permanently delete all your journey records from all devices.'
     );
 
     if (!confirmed) {
         return;
     }
-
-    try {
+try{showTemporaryMessage('🔄 Clearing history...');
+    
+        if (navigator.onLine && typeof JourneyDB !== 'undefined') {
+            try {
+                const journeys = await JourneyDB.getUserJourneys();
+                for (const journey of journeys) {
+                    if (journey.id) {
+                        await JourneyDB.deleteJourney(journey.id);
+                    }
+                }
+                console.log('✅ Cleared cloud history');
+            } catch (error) {
+                console.error('Error clearing cloud history:', error);
+            }
+        }
         localStorage.removeItem(CONFIG.STORAGE_KEY);
-        loadHistory();
-
+        if (typeof OfflineSync !== 'undefined') {
+            localStorage.removeItem('pendingJourneys');
+        }
+        
+        await loadHistory();
         showTemporaryMessage('✅ History cleared successfully');
 
     } catch (error) {

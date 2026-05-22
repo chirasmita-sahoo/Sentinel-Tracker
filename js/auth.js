@@ -1,5 +1,40 @@
-auth.onAuthStateChanged((user)=>{ 
-    if(user){window.location.href='dashboard.html';}
+auth.onAuthStateChanged(async (user)=>{ 
+    if (user) {
+        const userRef = db.collection('users').doc(user.uid);
+        const doc = await userRef.get();
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth(); // 0-indexed
+        let periodDate = new Date(year, month, 28);
+        if (now < periodDate) {
+            periodDate = new Date(year, month - 1, 28);
+        }
+        
+        const periodKey = `period_starting_${periodDate.toISOString().slice(0, 10)}`;
+
+        if (!doc.exists) {
+            await userRef.set({
+                uid: user.uid,
+                email: user.email,
+                name: user.displayName || "User",
+                monthlyEmailCount: 0, // Initialize to zero
+               lastEmailMonth: new Date().toISOString().slice(0, 7),
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                monthlyEmailCount: 0,
+                lastEmailMonth: periodKey
+            });
+            console.log("🛡️ User profile created");
+        } else {
+            const data = doc.data();
+            if (data.lastEmailMonth !== periodKey) {
+                await userRef.update({
+                    monthlyEmailCount: 0,
+                    lastEmailMonth: periodKey
+                });
+                console.log("🔄 Quota reset for new period starting on the 28th");
+            }
+        }
+        window.location.href='dashboard.html';}
     else{initializeForm();}
 });
 function initializeForm(){
@@ -138,7 +173,9 @@ async function handleSignup() {
             email: email,
             name: name,
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+            lastLogin: firebase.firestore.FieldValue.serverTimestamp(),
+            monthlyEmailCount: 0, 
+            lastEmailMonth: ""
         });
 
         console.log('Signup successful:', user.email);     

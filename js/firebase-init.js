@@ -1,12 +1,31 @@
-try{firebase.initializeApp(firebaseConfig);
-    console.log('Firebase config not found');
+if(!firebase.apps.length){try{
+  const config = window.firebaseConfig || firebaseConfig;
+  firebase.initializeApp(config);
+    console.log('Firebase initialized successfully');
 }catch(error){
     console.error('Firebase initialisation failed:',error);
+}}else{
+  console.log('Firebase already initialized');
+  firebase.app()}
+var auth = firebase.auth();
+var db = firebase.firestore();
+var storage;
+try {
+    storage = firebase.storage();
+    window.storage = storage;
+} catch (e) {
+    console.warn("Firebase Storage SDK not loaded. Storage features will be unavailable.");
 }
-const auth = firebase.auth();
-const db = firebase.firestore();
-const storage = firebase.storage();
+window.auth = auth;
+window.db = db;
+window.storage = storage;
 
+if(!window.authPersistenceSet){
+auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+.then(()=>{console.log('Auth persistence enabled');
+window.authPersistenceSet = true;})
+.catch((error)=>console.error('Auth persistence error:',error));
+}
 // HELPER FUNCTIONS
 function isUserLoggedIn() {
   return auth.currentUser !== null;
@@ -31,19 +50,26 @@ async function signOut() {
   }
 }
 // AUTH STATE LISTENER
-
+if (!window.authStateListenerAdded) {
 auth.onAuthStateChanged((user) => {
   if (user) {
-    console.log(' User logged in:', user.email);
+   console.log('User logged in:', user.email);
+      window.getCurrentUser = user;
   } else {
     console.log('User not logged in');
+    window.getCurrentUser=null;
     const protectedPages = ['tracker.html', 'history.html', 'dashboard.html'];
     const currentPage = window.location.pathname.split('/').pop();
     if (protectedPages.includes(currentPage)) {
+      console.log('Protected page - redirecting to login');
+        window.location.href = 'index.html';
       window.location.href = 'index.html';
     }
   }
 });
+window.authStateListenerAdded = true;
+  console.log('Auth state listener added');
+}
 
 // DATABASE HELPERS
 function getTimestamp() {
