@@ -959,5 +959,3 @@ window.OfflineSync = OfflineSync;
 window.SyncIndicator = SyncIndicator;
 window.EmergencyContactsDB = EmergencyContactsDB;
 console.log('Database module loaded with security & rate limiting');
-
-emergencyContacts

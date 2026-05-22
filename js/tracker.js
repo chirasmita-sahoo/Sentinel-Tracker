@@ -12,14 +12,20 @@ let chosendest = null;
 let mappicking = false;
 let previewmarker = null;
 let alertShown = false;
+let chosenDestName = null;
 let stationaryStartTime = null;
 let stationaryTimer = null;
+let stationaryReferencePos = null;
 let journeyStartTime = null;
 
 let alertTimer = null;
 let alerttimeremaining = 120;
 let currentalerttype = null;
 let alertshownfor = {};
+let currentJourneyId = null;
+
+let shareTokenHash = null;
+let shareManager = null;
 //CONFIGURATION
 const geocodeset = {
     api: 'https://nominatim.openstreetmap.org',
@@ -50,12 +56,13 @@ window.onload = function () {
         return;
     }
     document.getElementById('mode-badge').innerText = selectedMode.toUpperCase();
+    shareManager = new ShareManager();
     initMap();
     showInitialLocation();
     enablesearch();
     mappick();
     loadJourneyFromStorage();
-
+    setupShareButton();
 };
 
 // --- 2. Leaflet Map Setup ---
@@ -165,6 +172,10 @@ function enablesearch() {
     });
 }
 async function searchplace(query, retries = 3) {
+    if (watchId) {
+        alert("Please end your current journey before searching for a new destination.");
+        return;
+    }
     const dropdown = document.getElementById('suggestions');
     try {
         dropdown.innerHTML = '<div class="dropdown-loading">Searching...</div>';
@@ -231,6 +242,7 @@ function pickplace(place) {
     showdestpreview(coords, place.display_name);
     startbutton();
     chosendest = coords;
+    chosenDestName = place.display_name;
 }
 function mappick() {
     const btn = document.getElementById('map-select-btn');
@@ -255,6 +267,10 @@ function togglemappick() {
     }
 }
 async function onmappick(e) {
+    if (watchId) {
+        showTemporaryMessage("Cannot change destination while journey is active.");
+        return;
+    }
     const coords = {
         lat: e.latlng.lat,
         lng: e.latlng.lng
@@ -267,6 +283,7 @@ async function onmappick(e) {
         togglemappick();
         startbutton();
         chosendest = coords;
+        chosenDestName = placeName;
         updateStatus("Address fetched", "#2ecc71");
     } catch (error) {
         console.error('Reverse Geocoding Error:', error);
@@ -276,6 +293,7 @@ async function onmappick(e) {
         togglemappick();
         startbutton();
         chosendest = coords;
+        chosenDestName = coordsText;
     }
 }
 async function lookupAddress(lat, lng) {
@@ -309,22 +327,92 @@ function showdestpreview(coords, placeName) {
            ${placeName}
            </div>`).openPopup();
 
-    if (userlastpos) {
-        const bounds = L.latLngBounds([userlastpos, [coords.lat, coords.lng]])
-        map.fitBounds(bounds, { padding: [50, 50] });
-    } else {
-        map.setView([coords.lat, coords.lng], 15);
-    }
+    // On mobile, sometimes the bounds don't trigger properly due to layout changes.
+    // Ensure we accommodate different zoom experiences.
+    const isMobile = window.innerWidth <= 768;
+    const zoomLevel = isMobile ? 14 : 16;
+
+    // Invalidate map size FIRST since mobile UI changes map height dynamically.
+    setTimeout(() => {
+        map.invalidateSize();
+        map.flyTo([coords.lat, coords.lng], zoomLevel, { animate: true, duration: 1.5 });
+    }, 100);
+}
+//CHANGES--JOURNEY SHARE
+function setupShareButton() {
+    const shareBtn = document.getElementById('share-journey-btn');
+    if (!shareBtn) return;
+
+    shareBtn.addEventListener('click', async function () {
+        try {
+            // Disable button during generation
+            shareBtn.disabled = true;
+            shareBtn.textContent = 'Generating Link...';
+            const userName = shareManager.sanitizeInput(
+                localStorage.getItem('userName') || 'User'
+            );
+
+            // If we already generated a link for this journey, reuse it
+            if (shareTokenHash && window.currentShareUrl) {
+                const shareData = {
+                    shareUrl: window.currentShareUrl,
+                    isNew: false,
+                    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
+                };
+                showShareModal(shareData, userName);
+                return;
+            }
+
+            // Create journey ID if not yet assigned
+            if (!currentJourneyId) {
+                currentJourneyId = `journey_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            }
+
+            // Generate share link (pending status by default)
+            const result = await shareManager.generateShareLink(currentJourneyId, userName);
+            shareTokenHash = result.tokenHash || await shareManager.hashToken(result.token);
+
+            // If the journey has ALREADY started, immediately flip the link status to 'active'
+            if (journeyStartTime) {
+                await shareManager.updateJourneyStatus(shareTokenHash, 'active');
+            }
+
+            // Store the URL for reuse
+            window.currentShareUrl = result.url;
+
+            const shareData = {
+                shareUrl: result.url,
+                isNew: true,
+                expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
+            };
+            showShareModal(shareData, userName);
+
+        } catch (error) {
+            console.error('Error generating share link:', error);
+            alert('Failed to generate share link. Please try again.');
+        } finally {
+            shareBtn.disabled = false;
+            shareBtn.textContent = '\ud83d\udd17 Share Journey';
+        }
+    });
 }
 
+
 // --- 4. Activation & Transition Logic ---
-function activateSecurity() {
+async function activateSecurity() {
     const btn = document.getElementById('start-btn');
     if (watchId) {
         if (confirm("Are you sure you want to stop tracking and save this journey?")) {
             stoptracking();
         }
         return;
+    }
+    if (typeof JourneyDB !== 'undefined') {
+        const activeJourney = await JourneyDB.checkActiveJourney();
+        if (activeJourney) {
+            window.alert("You already have an active journey. Please end it before starting a new one.");
+            return;
+        }
     }
     if (!chosendest) {
         window.alert("Please select a destination before starting the tracker.");
@@ -334,7 +422,62 @@ function activateSecurity() {
         window.alert("Please wait for GPS signal before starting the tracker.");
         return;
     }
+    if (!currentJourneyId) {
+        currentJourneyId = `journey_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    }
+
     startJourney();
+
+    try {
+        // Create the ONE journey document — this is what both tracker and viewer use
+        await firebase.firestore()
+            .collection('journeys')
+            .doc(currentJourneyId)
+            .set({
+                userId: firebase.auth().currentUser?.uid || 'anonymous',
+                userEmail: firebase.auth().currentUser?.email || '',
+                userName: firebase.auth().currentUser?.displayName || localStorage.getItem('userName') || 'User',
+                startTime: firebase.firestore.FieldValue.serverTimestamp(),
+                status: 'active',
+                destination: goalcoord ? {
+                    lat: goalcoord.lat,
+                    lng: goalcoord.lng,
+                    name: chosenDestName || document.getElementById('start-input').value || 'Unknown'
+                } : null,
+                mode: localStorage.getItem('userTransportMode') || 'walking',
+                lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+        // FORCE INITIAL LOCATION SYNC
+        // If the user's device is completely stationary (e.g. a laptop on a desk), watchPosition may never fire.
+        // We manually push their current location to guarantee the viewer page gets at least 1 coordinate.
+        if (userlastpos) {
+            const initialPosition = {
+                coords: {
+                    latitude: userlastpos.lat,
+                    longitude: userlastpos.lng,
+                    speed: 0,
+                    accuracy: 10
+                }
+            };
+            await syncLocationToFirestore(initialPosition);
+        }
+
+
+        journeyStartTime = Date.now();
+    } catch (error) {
+        console.error('Error creating journey:', error);
+    }
+
+    // Activate the share link if one was generated before journey started
+    // This MUST be outside the main try/catch so it runs even if journey creation had issues
+    try {
+        if (shareTokenHash) {
+            await shareManager.updateJourneyStatus(shareTokenHash, 'active');
+        }
+    } catch (error) {
+        console.error('Error activating share link:', error);
+    }
 
     btn.innerText = "STOP JOURNEY";
     btn.classList.add('stop-btn');
@@ -346,7 +489,15 @@ function startJourney() {
     dashboard.classList.add('activating');
     dashboard.classList.add('active');
     journeyStartTime = Date.now();
-    // Removes scanner and fix map after slide finishes
+    document.getElementById('panic-btn').style.display = 'flex';
+    // Use the existing currentJourneyId (set in activateSecurity) — do NOT regenerate
+    localStorage.setItem('activeJourneyId', currentJourneyId);
+
+    const searchInput = document.getElementById('start-input');
+    const mapSelectBtn = document.getElementById('map-select-btn');
+    if (searchInput) searchInput.disabled = true;
+    if (mapSelectBtn) mapSelectBtn.disabled = true;
+
     setTimeout(() => {
         dashboard.classList.remove('activating');
         map.invalidateSize();
@@ -374,6 +525,19 @@ function startJourney() {
         const bounds = L.latLngBounds([userlastpos, goalcoord]);
         map.fitBounds(bounds, { padding: [50, 50] });
     }
+    if (mappicking) {
+        togglemappick();
+    }
+    map.off('click', onmappick);
+
+    if (stationaryTimer) clearInterval(stationaryTimer);
+    stationaryTimer = setInterval(() => {
+        if (stationaryStartTime && (Date.now() - stationaryStartTime) > constants.stationary_time) {
+            showalert("stationary", "⚠️ Prolonged Stationary Detected!", "You have been stationary for over 5 minutes.");
+            stationaryStartTime = Date.now();
+        }
+    }, 10000);
+
     startGPSMonitoring();
 }
 //GPS Logic
@@ -383,11 +547,14 @@ function startGPSMonitoring() {
             navigator.getBattery().then(battery => {
                 const highAccuracy = battery.level > 0.2 || battery.charging;
                 watchId = navigator.geolocation.watchPosition(
-                    (position) => {
+                    async (position) => {
                         const { latitude, longitude, speed } = position.coords;
                         const currentPos = L.latLng(latitude, longitude);
 
                         updateTracker(currentPos, speed);
+                        if (currentJourneyId) {
+                            await syncLocationToFirestore(position);
+                        }
                     },
                     (error) => {
                         console.error("GPS Error:", error);
@@ -402,10 +569,13 @@ function startGPSMonitoring() {
             });
         } else {
             watchId = navigator.geolocation.watchPosition(
-                (position) => {
+                async (position) => {
                     const { latitude, longitude, speed } = position.coords;
                     const currentPos = L.latLng(latitude, longitude);
                     updateTracker(currentPos, speed);
+                    if (currentJourneyId) {
+                        await syncLocationToFirestore(position);
+                    }
                 },
                 (error) => {
                     console.error("GPS Error:", error);
@@ -420,7 +590,44 @@ function startGPSMonitoring() {
         }
     }
 }
+async function syncLocationToFirestore(position) {
+    // Only sync if journey exists
+    if (!currentJourneyId) return;
 
+    const now = Date.now();
+    const timeSinceLastSync = now - (window.lastFirestoreSync || 0);
+
+    // Throttle to every 5 seconds
+    if (timeSinceLastSync < 5000) return;
+
+    try {
+        const { latitude, longitude, speed, accuracy } = position.coords;
+
+        // Add location to the journey's locations subcollection
+        await db.collection('journeys')
+            .doc(currentJourneyId)
+            .collection('locations')
+            .add({
+                lat: latitude,
+                lng: longitude,
+                speed: speed ? (speed * 3.6) : 0, // Convert m/s to km/h
+                accuracy: accuracy || 0,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+        window.lastFirestoreSync = now;
+
+        // Also update main journey document's lastUpdated
+        await db.collection('journeys')
+            .doc(currentJourneyId)
+            .update({
+                lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+    } catch (error) {
+        console.error('Error syncing location:', error);
+    }
+}
 // --- 5. Movement & Security Logic ---
 function updateTracker(currentPos, rawSpeed) {
     const prevPos = userMarker.getLatLng();
@@ -507,21 +714,16 @@ function checkspeed(speed) {
     }
 }
 function checkStationary(currentPos) {
-    if (!userlastpos) return;
-    const distMoved = currentPos.distanceTo(userlastpos) / 1000;
-    if (distMoved < constants.movementspeed) {
-        if (!stationaryStartTime) {
+    if (!stationaryReferencePos) {
+        stationaryReferencePos = currentPos;
+        stationaryStartTime = Date.now();
+    } else {
+        const distFromRef = currentPos.distanceTo(stationaryReferencePos) / 1000;
+        if (distFromRef >= constants.movementspeed) {
+            // User moved beyond exactly constants.movementspeed indicating significant movement
+            stationaryReferencePos = currentPos;
             stationaryStartTime = Date.now();
         }
-        else {
-            const stationaryperiod = Date.now() - stationaryStartTime;
-            if (stationaryperiod > constants.stationary_time) {
-                showalert("stationary", "⚠️ Prolonged Stationary Detected!", "You have been stationary for over 5 minutes.");
-                stationaryStartTime = Date.now();
-            }
-        }
-    } else {
-        stationaryStartTime = null;
     }
 }
 
@@ -552,7 +754,6 @@ function startbutton() {
 }
 function stopjourneybtn() {
     const btn = document.getElementById('start-btn');
-
     if (watchId) {
         if (confirm("Are you sure you want to stop tracking and save this journey?")) {
             stoptracking();
@@ -604,18 +805,60 @@ if ("Notification" in window && Notification.permission == "default") {
 }
 
 //journey stop
-function stoptracking() {
+async function stoptracking() {
+    document.getElementById('panic-btn').style.display = 'none';
     if (watchId) {
         navigator.geolocation.clearWatch(watchId);
         watchId = null;
     }
     if (stationaryTimer) {
-        clearTimeout(stationaryTimer);
+        clearInterval(stationaryTimer);
         stationaryTimer = null;
     }
-    saveJourneyToHistory();
+    await saveJourneyToHistory();
+
+    // End the journey in Firestore BEFORE clearing the ID
+    await endJourney();
+
     localStorage.removeItem('activeJourney');
-    window.location.href = 'index.html';
+    localStorage.removeItem('activeJourneyId');
+
+    // Reset share state so next journey gets a fresh link
+    currentJourneyId = null;
+    shareTokenHash = null;
+    window.currentShareUrl = null;
+    chosenDestName = null;
+
+    const searchInput = document.getElementById('start-input');
+    const mapSelectBtn = document.getElementById('map-select-btn');
+    if (searchInput) searchInput.disabled = false;
+    if (mapSelectBtn) mapSelectBtn.disabled = false;
+    setTimeout(() => {
+        window.location.href = 'dashboard.html';
+    }, 1000);
+}
+async function endJourney() {
+    if (!currentJourneyId) return;
+
+    try {
+        // Update journey status to completed
+        await db.collection('journeys')
+            .doc(currentJourneyId)
+            .update({
+                status: 'completed',
+                endTime: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+        // Update share link expiration (1 hour from now or keep existing)
+        if (shareTokenHash) {
+            await shareManager.updateJourneyStatus(shareTokenHash, 'completed');
+        }
+
+        console.log('✅ Journey ended:', currentJourneyId);
+
+    } catch (error) {
+        console.error('Error ending journey:', error);
+    }
 }
 function saveJourneyToStorage() {
     try {
@@ -656,26 +899,77 @@ function loadJourneyFromStorage() {
         localStorage.removeItem('activeJourney');
     }
 }
-function saveJourneyToHistory() {
+async function saveJourneyToHistory() {
     if (!goalcoord || pathCoordinates.length === 0) return;
+
     try {
-        const journey = {
-            id: Date.now(),
+        const journeyId = currentJourneyId || localStorage.getItem('activeJourneyId') || `journey_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+        const journeyData = {
             mode: localStorage.getItem('userTransportMode'),
-            startTime: journeyStartTime,
-            endTime: Date.now(),
+            startTime: new Date(journeyStartTime),
+            endTime: new Date(),
             destination: { lat: goalcoord.lat, lng: goalcoord.lng },
-            path: pathCoordinates,
-            distance: calculateTotalDistance(),
-            duration: Date.now() - journeyStartTime
+            pathPoints: pathCoordinates.map(coord => ({
+                lat: coord[0],
+                lng: coord[1],
+                timestamp: Date.now()
+            })),
+            distance: parseFloat(calculateTotalDistance()),
+            duration: Date.now() - journeyStartTime,
+            avgSpeed: calculateAverageSpeed(),
+            alerts: [],
+            status: 'completed'
         };
-        let history = JSON.parse(localStorage.getItem('journeyHistory')) || [];
-        history.unshift(journey);
-        if (history.length > 50) history = history.slice(0, 50)
-        localStorage.setItem('journeyHistory', JSON.stringify(history));
+
+        if (navigator.onLine && typeof JourneyDB !== 'undefined') {
+            if (typeof SyncIndicator !== 'undefined') {
+                SyncIndicator.saving();
+            }
+            try {
+                await JourneyDB.saveJourneyWithId(journeyId, journeyData);
+                console.log('Journey saved to cloud');
+
+                if (typeof SyncIndicator !== 'undefined') {
+                    SyncIndicator.synced();
+                }
+            } catch (error) {
+                console.error('Cloud save failed, saving locally:', error);
+                if (typeof OfflineSync !== 'undefined') {
+                    OfflineSync.saveToLocal({ ...journeyData, _journeyId: journeyId });
+                }
+                if (typeof SyncIndicator !== 'undefined') {
+                    SyncIndicator.offline();
+                }
+            }
+        } else {
+            console.log('📴 Offline - saving locally');
+            if (typeof OfflineSync !== 'undefined') {
+                OfflineSync.saveToLocal(journeyData);
+                if (typeof SyncIndicator !== 'undefined') {
+                    SyncIndicator.offline();
+                }
+            } else {
+                let history = JSON.parse(localStorage.getItem('journeyHistory')) || [];
+                history.unshift(journeyData);
+                if (history.length > 50) history = history.slice(0, 50);
+                localStorage.setItem('journeyHistory', JSON.stringify(history));
+            }
+        }
+
     } catch (error) {
-        console.error('Failed to save journey history:', error);
+        console.error('Failed to save journey:', error);
+        alert('Error saving journey. Please try again.');
     }
+}
+function calculateAverageSpeed() {
+    if (!journeyStartTime || pathCoordinates.length === 0) return 0;
+
+    const durationHours = (Date.now() - journeyStartTime) / (1000 * 60 * 60);
+    const distanceKm = parseFloat(calculateTotalDistance());
+
+    if (durationHours === 0) return 0;
+    return distanceKm / durationHours;
 }
 function calculateTotalDistance() {
     let total = 0;
@@ -706,6 +1000,31 @@ function alertmodal(type, title, message) {
     modal.classList.remove('hidden');
     startalertcountdown();
     alertSound();
+
+    syncAlertToFirestore(type, {
+        location: userlastpos ? { lat: userlastpos.lat, lng: userlastpos.lng } : null,
+        message: message
+    });
+}
+async function syncAlertToFirestore(alertType, data) {
+    if (!currentJourneyId) return;
+
+    try {
+        await db.collection('journeys')
+            .doc(currentJourneyId)
+            .collection('alerts')
+            .add({
+                type: alertType,
+                status: 'pending',
+                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                location: data.location || null,
+                message: data.message || null
+            });
+
+        console.log('✅ Alert synced to Firestore:', alertType);
+    } catch (error) {
+        console.error('Error syncing alert:', error);
+    }
 }
 function startalertcountdown() {
     alerttimeremaining = 120;
@@ -750,6 +1069,7 @@ function alertresponse(response) {
     alerthistory.unshift(responsedata);
     if (alerthistory.length > 50) alerthistory = alerthistory.slice(0, 50);
     localStorage.setItem('alerthistory', JSON.stringify(alerthistory));
+
     if (response === 'safe') {
         document.getElementById('status').innerText = "✅ User confirmed safe";
         document.getElementById('status').style.color = "#2ecc71";
@@ -798,6 +1118,23 @@ function escalateAlert() {
         });
     }
 }
+async function manualtrigger() {
+    if (!currentJourneyId) return;
+    currentalerttype = 'emergency';
+    showalert('emergency', '🆘 MANUAL ALERT ACTIVATED', 'Your emergency contacts have been notified.');
+    try {
+        await firebase.firestore().collection('journeys').doc(currentJourneyId).update({
+            status: 'alert',
+            alertType: 'emergency',
+            lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        sendEmergencyAlert();
+
+    } catch (error) {
+        console.error("Failed to sync manual panic:", error);
+    }
+}
 function alertSound() {
     try {
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -843,4 +1180,213 @@ function sendEmergencyAlert() {
         localStorage.setItem('emergencyEvents', JSON.stringify(emergency));
     } catch (error) { console.error('Failed to save emergency event:', error); }
 
+}
+//journey share helpers
+function showShareModal(shareData, userName) {
+    // Remove any existing modal
+    const existingModal = document.querySelector('.share-modal-overlay');
+    if (existingModal) existingModal.remove();
+
+    // Create modal
+    const modal = document.createElement('div');
+    modal.className = 'modal share-modal-overlay';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 500px;">
+            <h2 style="margin-bottom: 20px; color: #2ecc71;">
+                ✅ Share Link Generated
+            </h2>
+            
+            <p style="color: #95a5a6; margin-bottom: 20px;">
+                Share this secure link with anyone you trust. 
+                ${shareData.isNew ? 'Link expires in 24 hours.' : 'Using existing link.'}
+            </p>
+
+            <div style="
+                background: rgba(255,255,255,0.05);
+                padding: 15px;
+                border-radius: 10px;
+                border-left: 3px solid #3498db;
+                margin-bottom: 20px;
+            ">
+                <small style="color: #95a5a6; display: block; margin-bottom: 8px;">Share Link:</small>
+                <input type="text" 
+                       id="share-link-input" 
+                       value="${shareData.shareUrl}" 
+                       readonly 
+                       style="
+                           width: 100%;
+                           padding: 12px;
+                           background: rgba(0,0,0,0.3);
+                           border: 1px solid rgba(255,255,255,0.2);
+                           border-radius: 5px;
+                           color: white;
+                           font-family: monospace;
+                           font-size: 0.9rem;
+                       ">
+            </div>
+
+            <div class="alert-actions" style="display: grid; gap: 10px;">
+                <button onclick="copyShareLink()" class="btn-safe" style="
+                    padding: 14px;
+                    background: linear-gradient(135deg, #2ecc71, #27ae60);
+                    color: white;
+                    border: none;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    font-weight: bold;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 10px;
+                ">
+                    <span class="btn-icon">📋</span>
+                    <span>Copy Link</span>
+                </button>
+                
+                <button onclick="shareViaWhatsApp()" class="btn-help" style="
+                    padding: 14px;
+                    background: linear-gradient(135deg, #25D366, #128C7E);
+                    color: white;
+                    border: none;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    font-weight: bold;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 10px;
+                ">
+                    <span class="btn-icon">📱</span>
+                    <span>Share via WhatsApp</span>
+                </button>
+                
+                <button onclick="shareNative()" class="btn-help" style="
+                    padding: 14px;
+                    background: linear-gradient(135deg, #3498db, #2980b9);
+                    color: white;
+                    border: none;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    font-weight: bold;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 10px;
+                ">
+                    <span class="btn-icon">📤</span>
+                    <span>Share via...</span>
+                </button>
+                
+                <button onclick="closeShareModal()" class="btn-snooze" style="
+                    padding: 14px;
+                    background: rgba(255,255,255,0.1);
+                    color: white;
+                    border: 1px solid rgba(255,255,255,0.2);
+                    border-radius: 8px;
+                    cursor: pointer;
+                    font-weight: bold;
+                ">
+                    <span>Close</span>
+                </button>
+            </div>
+
+            <div style="
+                margin-top: 20px;
+                padding: 15px;
+                background: rgba(52, 152, 219, 0.1);
+                border-radius: 8px;
+                border-left: 3px solid #3498db;
+            ">
+                <small style="color: #3498db; font-weight: bold;">🔒 Security Features:</small>
+                <ul style="margin: 10px 0 0 20px; font-size: 0.85rem; color: #95a5a6; line-height: 1.6;">
+                    <li>Max 10 concurrent viewers</li>
+                    <li>Auto-expires in 24 hours</li>
+                    <li>Stays active 1hr after journey ends</li>
+                    <li>Secure encrypted connection</li>
+                </ul>
+            </div>
+
+            <p style="color: #95a5a6; font-size: 0.85rem; margin-top: 15px; text-align: center; font-style: italic;">
+                Expires: ${shareData.expiresAt.toLocaleString()}
+            </p>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Store link for sharing
+    window.currentShareUrl = shareData.shareUrl;
+    window.currentShareUserName = userName;
+}
+
+/**
+ * Copy link to clipboard
+ */
+function copyShareLink() {
+    const input = document.getElementById('share-link-input');
+    input.select();
+    input.setSelectionRange(0, 99999);
+
+    try {
+        document.execCommand('copy');
+
+        const btn = event.target.closest('button');
+        const originalHTML = btn.innerHTML;
+        btn.innerHTML = '<span class="btn-icon">✓</span><span>Copied!</span>';
+        btn.style.background = 'linear-gradient(135deg, #27ae60, #229954)';
+
+        setTimeout(() => {
+            btn.innerHTML = originalHTML;
+            btn.style.background = '';
+        }, 2000);
+
+    } catch (error) {
+        navigator.clipboard.writeText(window.currentShareUrl).then(() => {
+            alert('Link copied to clipboard!');
+        }).catch(() => {
+            alert('Please copy the link manually');
+        });
+    }
+}
+
+
+function shareViaWhatsApp() {
+    const userName = window.currentShareUserName || 'User';
+    const message = encodeURIComponent(
+        `🛡️ Track ${userName}'s journey in real-time:\n${window.currentShareUrl}\n\nI'm sharing my live location for safety. You'll receive alerts if anything unusual is detected.`
+    );
+
+    const whatsappUrl = `https://wa.me/?text=${message}`;
+    window.open(whatsappUrl, '_blank');
+}
+
+async function shareNative() {
+    const userName = window.currentShareUserName || 'User';
+
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: 'Sentinel GPS - Live Journey',
+                text: `Track ${userName}'s journey in real-time. I'm sharing my live location for safety.`,
+                url: window.currentShareUrl
+            });
+        } catch (error) {
+            if (error.name !== 'AbortError') {
+                console.log('Share cancelled or failed:', error);
+            }
+        }
+    } else {
+        const subject = encodeURIComponent('Track My Journey - Sentinel GPS');
+        const body = encodeURIComponent(
+            `I'm sharing my live journey with you for safety.\n\nTrack my location here:\n${window.currentShareUrl}\n\nThis link is secure and will expire in 24 hours.`
+        );
+        window.location.href = `mailto:?subject=${subject}&body=${body}`;
+    }
+}
+
+function closeShareModal() {
+    const modal = document.querySelector('.share-modal-overlay');
+    if (modal) {
+        modal.remove();
+    }
 }

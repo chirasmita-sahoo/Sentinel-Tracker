@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Emergency Contact - Sentinel GPS</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            text-align: center;
+        }
+        .icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 24px;
+        }
+        .message {
+            color: #666;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        .loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .success {
+            color: #2ecc71;
+        }
+        .error {
+            color: #e74c3c;
+        }
+        .btn {
+            display: inline-block;
+            padding: 12px 30px;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            margin-top: 20px;
+            transition: all 0.3s ease;
+        }
+        .btn:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+        }
+        .info-box {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: left;
+        }
+        .info-box strong {
+            display: block;
+            margin-bottom: 5px;
+            color: #333;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="loading-state" class="loading">
+            <div class="spinner"></div>
+            <p>Verifying your permission...</p>
+        </div>
+
+        <div id="success-state" class="hidden">
+            <div class="icon">✅</div>
+            <h1 class="success">Verification Successful!</h1>
+            <p class="message">You have been successfully added as an emergency contact.</p>
+            <div class="info-box">
+                <strong>What happens now?</strong>
+                <p>You will receive notifications if the person who added you triggers an emergency alert.</p>
+            </div>
+        </div>
+
+        <div id="error-state" class="hidden">
+            <div class="icon">❌</div>
+            <h1 class="error">Verification Failed</h1>
+            <p class="message" id="error-message">Invalid or expired verification link.</p>
+        </div>
+
+        <div id="expired-state" class="hidden">
+            <div class="icon">⏰</div>
+            <h1 class="error">Link Expired</h1>
+            <p class="message">This verification link has expired. Please ask the person to send a new invitation.</p>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
+    <script>
+        // ==========================================
+        // SECURE VERIFICATION SYSTEM
+        // ==========================================
+
+        // Firebase config (inline to avoid loading issues)
+        const firebaseConfig = {
+        apiKey: "AIzaSyAtSmVVgOqqOYAq6cs9RLyQ7sCWR-I5BRo",
+        authDomain: "sentinelgps-tracker.firebaseapp.com",
+        projectId: "sentinelgps-tracker",
+        storageBucket: "sentinelgps-tracker.firebasestorage.app",
+        messagingSenderId: "5867468763",
+        appId: "1:5867468763:web:f9d92bd5102aa006b1d9fe",
+        measurementId: "G-7CHWD2S714"
+         };
+
+        // Initialize Firebase
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.firestore();
+
+        // Get URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const userId = urlParams.get('uid');
+        const contactId = urlParams.get('id');
+        const token = urlParams.get('token');
+
+        // Sanitize inputs
+        function sanitize(input) {
+            if (typeof input !== 'string') return '';
+            return input.replace(/[^a-zA-Z0-9_-]/g, '');
+        }
+
+        // Show state
+        function showState(state) {
+            document.getElementById('loading-state').classList.add('hidden');
+            document.getElementById('success-state').classList.add('hidden');
+            document.getElementById('error-state').classList.add('hidden');
+            document.getElementById('expired-state').classList.add('hidden');
+            
+            document.getElementById(state + '-state').classList.remove('hidden');
+        }
+
+        // Verify contact
+        async function verifyContact() {
+           try {
+        const contactRef = db.collection('users').doc(userId).collection('emergencyContacts').doc(contactId);
+        const doc = await contactRef.get();
+
+        if (!doc.exists) {
+            throw new Error('Contact record not found.');
+        }
+
+        const data = doc.data();
+        
+        if (data.verificationToken !== token) {
+            throw new Error('Invalid verification token.');
+        }
+        // Check if already processed
+        if (data.status === 'verified') {
+            showState('success');
+            return;
+        }
+
+        // Logic check for expiry (7 days)
+        const createdAt = data.tokenCreatedAt.toDate();
+        const now = new Date();
+        const diffDays = (now - createdAt) / (1000 * 60 * 60 * 24);
+
+        if (diffDays > 7) {
+            showState('expired');
+            await contactRef.update({
+                status: 'expired',
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            return;
+        }
+
+        await contactRef.update({
+            status: 'verified',
+            verificationToken: token, // This line fixes the Permission Denied error
+            verifiedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        console.log('✅ Verification successful');
+        showState('success');
+
+    } catch (error) {
+        console.error('❌ Verification error:', error);
+        document.getElementById('error-message').textContent = "Security verification failed. Link may be invalid.";
+        showState('error');
+    }
+        }
+
+        // Start verification on page load
+        if (userId && contactId && token) {
+            verifyContact();
+        } else {
+            document.getElementById('error-message').textContent = 'Invalid verification link. Missing required parameters.';
+            showState('error');
+        }
+    </script>
+</body>
+</html>

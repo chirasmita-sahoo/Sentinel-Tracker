@@ -1,21 +1,24 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sentinel GPS | Live Security Feed</title>
-    
+
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    
+
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
     <script src="js/firebase-config.js"></script>
     <script src="js/firebase-init.js"></script>
+    <script src="js/database.js"></script>
     <link rel="stylesheet" href="tracker.css">
     <link rel="stylesheet" href="address.css">
 </head>
+
 <body>
 
     <div class="dashboard-container">
@@ -28,13 +31,24 @@
             <div class="input-section">
                 <label>Target Destination</label>
                 <div class="search-wrapper">
-                     <input type="text" id="start-input" placeholder="Search address" autocomplete="off">
-                     <span class="search-icon">🔍</span>
-                     <div id="suggestions" class="dropdown"></div>
+                    <input type="text" id="start-input" placeholder="Search address" autocomplete="off">
+                    <span class="search-icon">🔍</span>
+                    <div id="suggestions" class="dropdown"></div>
                 </div>
                 <button id="map-select-btn" class="map-btn">SELECT ON MAP</button>
                 <p class="input-hint">Type an address or click SELECT ON MAP</p>
                 <button id="start-btn" onclick="activateSecurity()">Start Journey</button>
+                <button id="share-journey-btn" class="secondary-btn"
+                    style="width: 100%; padding: 12px; background: #34495e; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                    🔗 Share Journey
+                </button>
+
+                <button id="panic-btn" class="btn-stop" onclick="manualtrigger()"
+                    style="display: none; background-color: #e74c3c; margin-top: 10px;">
+                    <span class="btn-icon">🆘</span>
+                    <span>SEND ALERT</span>
+                </button>
+
             </div>
 
             <div class="stats-panel">
@@ -79,7 +93,7 @@
                 <button class="btn-safe" onclick="alertresponse('safe')">
                     <span class="btn-icon">✅</span>
                     <span>I'm Safe</span>
-                    </button>
+                </button>
                 <button class="btn-help" onclick="alertresponse('help')">
                     <span class="btn-icon">🆘</span>
                     <span>Need Help</span>
@@ -90,11 +104,12 @@
                 </button>
             </div>
             <p class="modal-note">No response will escalate the alert automatically.</p>
-     </div>
+        </div>
     </div>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    
+    <script src="js/share-manager.js"></script>
     <script src="js/tracker.js"></script>
 
 </body>
+
 </html>

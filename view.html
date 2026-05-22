@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Journey Tracking | Sentinel GPS</title>
+
+    <!-- ===== SECURITY HEADERS (XSS, CSRF Protection) ===== -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; 
+                   script-src 'self' 'unsafe-inline' https://www.gstatic.com https://unpkg.com; 
+                   style-src 'self' 'unsafe-inline' https://unpkg.com; 
+                   img-src 'self' data: https://*.tile.openstreetmap.org https://a.tile.openstreetmap.org https://b.tile.openstreetmap.org https://c.tile.openstreetmap.org; 
+                   connect-src 'self' https://*.firebaseio.com https://*.googleapis.com wss://*.firebaseio.com https://unpkg.com; 
+                   font-src 'self';">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="Referrer-Policy" content="no-referrer">
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Roboto, sans-serif;
+        }
+
+        body {
+            background: #060a3a;
+            color: white;
+            overflow: hidden;
+        }
+
+        /* Loading Screen */
+        #loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: linear-gradient(135deg, #060a3a 0%, #0a0f2e 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+        }
+
+        #loading-screen.hidden {
+            display: none;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(52, 152, 219, 0.2);
+            border-top-color: #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Error Screen */
+        #error-screen {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #060a3a;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+
+        #error-screen.active {
+            display: flex;
+        }
+
+        .error-content {
+            text-align: center;
+            max-width: 500px;
+            padding: 40px;
+        }
+
+        .error-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+        }
+
+        .error-title {
+            font-size: 1.8rem;
+            color: #e74c3c;
+            margin-bottom: 15px;
+        }
+
+        .error-message {
+            font-size: 1.1rem;
+            color: #95a5a6;
+            line-height: 1.6;
+        }
+
+        /* Main Container */
+        .viewer-container {
+            display: none;
+            width: 100vw;
+            height: 100vh;
+            flex-direction: column;
+        }
+
+        .viewer-container.active {
+            display: flex;
+        }
+
+        /* Top Bar */
+        .top-bar {
+            background: rgba(10, 15, 45, 0.98);
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+        }
+
+        .viewer-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-badge {
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+
+        .status-active {
+            background: #2ecc71;
+            color: white;
+        }
+
+        .status-pending {
+            background: #95a5a6;
+            color: white;
+        }
+
+        .status-offline {
+            background: #e67e22;
+            color: white;
+            animation: blink 1s infinite;
+        }
+
+        .status-completed {
+            background: #3498db;
+            color: white;
+        }
+
+        .status-emergency {
+            background: #e74c3c;
+            color: white;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes blink {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.7;
+            }
+        }
+
+        /* Info Panel */
+        .info-panel {
+            background: rgba(10, 15, 45, 0.95);
+            padding: 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .info-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 12px;
+            border-radius: 8px;
+            border-left: 3px solid #3498db;
+        }
+
+        .info-label {
+            font-size: 0.7rem;
+            color: #95a5a6;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        .info-value {
+            font-size: 1rem;
+            color: white;
+            font-weight: 500;
+        }
+
+        /* Alert Banner */
+        .alert-banner {
+            display: none;
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            padding: 15px 20px;
+            color: white;
+            text-align: center;
+            font-weight: bold;
+            animation: shake 0.5s;
+            z-index: 999;
+        }
+
+        .alert-banner.active {
+            display: block;
+        }
+
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            25% {
+                transform: translateX(-5px);
+            }
+
+            75% {
+                transform: translateX(5px);
+            }
+        }
+
+        /* Map Container */
+        #viewer-map {
+            flex: 1;
+            position: relative;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .info-panel {
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
+                padding: 15px;
+            }
+
+            .top-bar {
+                flex-direction: column;
+                gap: 10px;
+                padding: 15px;
+            }
+
+            .viewer-title {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            .info-item {
+                font-size: 0.9rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Loading Screen -->
+    <div id="loading-screen">
+        <div class="spinner"></div>
+        <div style="color: #3498db; font-size: 1.1rem;">Validating share link...</div>
+    </div>
+
+    <!-- Error Screen -->
+    <div id="error-screen">
+        <div class="error-content">
+            <div class="error-icon">⚠️</div>
+            <h1 class="error-title" id="error-title">Access Denied</h1>
+            <p class="error-message" id="error-message"></p>
+        </div>
+    </div>
+
+    <!-- Main Viewer -->
+    <div class="viewer-container" id="viewer-container">
+        <!-- Top Bar -->
+        <div class="top-bar">
+            <div class="viewer-title">
+                <h2>🛡️ <span id="user-name">User</span>'s Journey</h2>
+            </div>
+            <span class="status-badge status-pending" id="status-badge">LOADING</span>
+        </div>
+
+        <!-- Alert Banner -->
+        <div class="alert-banner" id="alert-banner">
+            <span id="alert-icon">🚨</span>
+            <span id="alert-text"></span>
+        </div>
+
+        <!-- Info Panel -->
+        <div class="info-panel">
+            <div class="info-item">
+                <div class="info-label">Destination</div>
+                <div class="info-value" id="destination">Loading...</div>
+            </div>
+
+            <div class="info-item">
+                <div class="info-label">Current Location</div>
+                <div class="info-value" id="current-coords" style="font-family: monospace; font-size: 0.85rem;">
+                    --
+                </div>
+            </div>
+
+            <div class="info-item">
+                <div class="info-label">Speed</div>
+                <div class="info-value" id="speed-stat">0.0 km/h</div>
+            </div>
+
+            <div class="info-item">
+                <div class="info-label">Distance</div>
+                <div class="info-value" id="distance-stat">-- km</div>
+            </div>
+
+            <div class="info-item">
+                <div class="info-label">Duration</div>
+                <div class="info-value" id="duration-stat">--:--:--</div>
+            </div>
+
+            <div class="info-item">
+                <div class="info-label">Last Update</div>
+                <div class="info-value" id="last-update-stat">--</div>
+            </div>
+        </div>
+
+        <!-- Map -->
+        <main id="viewer-map"></main>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Firebase Config & Init -->
+    <script src="js/firebase-config.js"></script>
+    <script src="js/firebase-init.js"></script>
+
+    <!-- Share Manager -->
+    <script src="js/share-manager.js"></script>
+
+    <!-- Viewer Logic -->
+    <script src="js/viewer.js"></script>
+</body>
+
+</html>
