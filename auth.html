@@ -12,19 +12,22 @@
     <script src="js/firebase-config.js"></script>
     <script src="js/firebase-init.js"></script>
     
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
 
     <link rel="stylesheet" href="index.css">
     <link rel="stylesheet" href="auth.css">
 </head>
 <body>
-        <div class="glass-card auth-card">
-            <div class="logo-area">
-                <h1>🛡️ Sentinel GPS</h1>
-                <div class="pulse-line"></div>
-                <p class="tagline">Secure Your Journey</p>
-            </div>
-            <div id="login-form" class="auth-form hidden">
-                <h2>Welcome Back</h2>  
+
+    <div class="hero-wrapper">
+        <div id="map"></div>
+         
+        <div class="text-section-auth">
+            
+
+            <div id="login-form" class="auth-form ">
+                <h2 >Welcome Back</h2>  
                 <div class="input-group">
                     <label for="login-email">Email</label>
                     <input type="email" id="login-email" placeholder="your@email.com" required>
@@ -43,15 +46,15 @@
                     </a>
                 </div>
 
-                <button class="auth-btn primary" onclick="handleLogin()">
+                <button class="auth-btn primary-btn" onclick="handleLogin()" >
                     <span id="login-btn-text">Sign In</span>
                     <span id="login-spinner" class="spinner hidden"></span>
                 </button>
 
-                <div class="auth-divider">
+                <div class="auth-divider" style="text-align: center; margin: 15px 0; color: #666;">
                     <span>Don't have an account?</span>
                 </div>
-                <button class="auth-btn secondary" onclick="showSignupForm()">
+                <button class="auth-btn secondary-btn" onclick="showSignupForm()" style="width: 100%;">
                     Create Account
                 </button>
 
@@ -59,7 +62,7 @@
             </div>
 
             <div id="signup-form" class="auth-form hidden">
-                <h2>Create Account</h2>                
+                <h2 >Create Account</h2>                
                 <div class="input-group">
                     <label for="signup-name">Full Name</label>
                     <input type="text" id="signup-name" placeholder="Your Name" required>
@@ -83,14 +86,14 @@
                     <input type="password" id="signup-confirm" placeholder="••••••••" required>
                 </div>
 
-                <div class="terms-accept">
+                <div class="terms-accept" style="margin: 15px 0;">
                     <label>
                         <input type="checkbox" id="accept-terms" required>
-                        <span>I agree to the <a href="#" onclick="return false;">Terms of Service</a> and <a href="#" onclick="return false;">Privacy Policy</a></span>
+                        <span style="font-size: 0.9rem;">I agree to the <a href="#" onclick="return false;">Terms</a> and <a href="#" onclick="return false;">Privacy</a></span>
                     </label>
                 </div>
 
-                <button class="auth-btn primary" onclick="handleSignup()">
+                <button class="auth-btn primary-btn" onclick="handleSignup()">
                     <span id="signup-btn-text">Create Account</span>
                     <span id="signup-spinner" class="spinner hidden"></span>
                 </button>
@@ -99,7 +102,7 @@
                     <span>Already have an account?</span>
                 </div>
 
-                <button class="auth-btn secondary" onclick="showLoginForm()">
+                <button class="auth-btn secondary-btn" onclick="showLoginForm()">
                     Sign In
                 </button>
 
@@ -107,31 +110,35 @@
             </div>
 
             <div id="forgot-form" class="auth-form hidden">
-                <h2>Reset Password</h2>
-                <p class="form-description">Enter your email and we'll send you a reset link</p>
+                <h2 style="margin-bottom: 1rem; color: #1A1D23;">Reset Password</h2>
+                <p class="form-description" style="margin-bottom: 1.5rem; color: #666;">Enter your email and we'll send you a reset link.</p>
                 
                 <div class="input-group">
                     <label for="forgot-email">Email</label>
                     <input type="email" id="forgot-email" placeholder="your@email.com" required>
                 </div>
 
-                <button class="auth-btn primary" onclick="handleForgotPassword()">
+                <button class="auth-btn primary-btn" onclick="handleForgotPassword()" style="width: 100%; margin: 15px 0;">
                     <span id="forgot-btn-text">Send Reset Link</span>
                     <span id="forgot-spinner" class="spinner hidden"></span>
                 </button>
 
-                <button class="auth-btn secondary" onclick="showLoginForm()">
+                <button class="auth-btn secondary-btn" onclick="showLoginForm()" style="width: 100%;">
                     Back to Login
                 </button>
 
                 <div id="forgot-error" class="error-message hidden"></div>
                 <div id="forgot-success" class="success-message hidden"></div>
             </div>
-            <div class="footer-note">
-            Encrypted End-to-End 
-        </div>
-        </div>
 
+        </div>  
+
+        <div class="gradient-bridge-dark"></div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+    <script src="index.js"></script> 
     <script src="js/auth.js"></script>
 </body>
 </html>

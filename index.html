@@ -9,69 +9,56 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+    
     <script src="js/firebase-config.js"></script>
     <script src="js/firebase-init.js"></script>  
-   <script src="js/database.js"></script>
+    <script src="js/database.js"></script>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
     <link rel="stylesheet" href="index.css">
 </head>
 <body>
 
-    <div class="glass-card landing-card">
-        <div class="logo-area">
-            <h1>🛡️ Sentinel GPS</h1>
-            <div class="pulse-line"></div>
-        </div>
-        <h2 class="main-heading">Your Safety, Our Priority</h2>
-        <p class="tagline">Real-time GPS tracking with intelligent safety alerts. <br>Share your journey with trusted contacts.</p>
-        <div class="features-grid">
-            <div class="feature-item">
-                <span class="feature-icon">🗺️</span>
-                <span class="feature-text">Live GPS Tracking</span>
-            </div>
-            <div class="feature-item">
-                <span class="feature-icon">🚨</span>
-                <span class="feature-text">Smart Safety Alerts</span>
-            </div>
-            <div class="feature-item">
-                <span class="feature-icon">👥</span>
-                <span class="feature-text">Emergency Contacts</span>
-            </div>
-            <div class="feature-item">
-                <span class="feature-icon">🔐</span>
-                <span class="feature-text">End-to-End Encrypted</span>
-            </div>
-        </div>
-        <div class="cta-section">
-            <div id="guest-view">
-                <a href="auth.html?mode=signup" class="primary-cta">
-                    🚀 Get Started - It's Free
-                </a>
-                <p class="cta-subtitle">Create your account in 30 seconds</p>
-                
-                <div class="secondary-action">
-                    <p class="already-member">Already have an account?</p>
-                    <a href="auth.html?mode=login" class="secondary-cta">
-                        🔐 Sign In
+    <div class="hero-wrapper">
+        <div id="map"></div>
+
+        <div class="text-section">
+            <h1>Sentinel </h1>
+            <h2>Your safe partner</h2>
+            <p>Never travel alone. Share your live route with loved ones, backed by a self-triggering alarm. If it detects an unexpected detour, dangerous speeding, or an unusual stop, it instantly alerts your trusted circle. Real-time safety, automatically.</p>
+            
+            <div class="cta-section">
+                <div id="guest-view">
+                    <a href="auth.html?mode=signup" class="primary-btn" style="display: inline-block; text-decoration: none; margin-bottom: 20px;">
+                        Get Started - It's Free
                     </a>
+                    <div class="secondary-action">
+                        <p style="margin-bottom: 10px; color: #666;">Already have an account?</p>
+                        <a href="auth.html?mode=login" class="secondary-btn" style="display: inline-block; text-decoration: none;">
+                            Sign In
+                        </a>
+                    </div>
+                </div>
+
+                <div id="user-view" style="display: none;">
+                    <div class="welcome-back">
+                        <h3 style="margin-bottom: 10px; font-size: 1.5rem;">Welcome back, <span id="user-name">User</span>! 👋</h3>
+                        <p style="margin-bottom: 20px;">Ready to start tracking?</p>
+                    </div>
+                    <div class="buttons">
+                        <a href="dashboard.html" class="primary-btn" style="text-decoration: none;">🏠 Dashboard</a>
+                        <button onclick="handleLogout()" class="secondary-btn">🚪 Logout</button>
+                    </div>
                 </div>
             </div>
-            <div id="user-view" style="display: none;">
-                <div class="welcome-back">
-                    <h3>Welcome back, <span id="user-name">User</span>! 👋</h3>
-                    <p>Ready to start tracking?</p>
-                </div>
-                <a href="dashboard.html" class="primary-cta">
-                    🏠 Go to Dashboard
-                </a>
-                <button onclick="handleLogout()" class="logout-cta">
-                    🚪 Logout
-                </button>
-            </div>
         </div>
-        <div class="footer-note">
-            100% Free Forever • No Credit Card Required • Encrypted & Secure
-        </div>
+
+        <div class="gradient-bridge"></div>
     </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
     <script src="index.js"></script>
 
 </body>
