@@ -1,0 +1,229 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // --- HELPER FUNCTIONS ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isUser(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+ 
+    function isValidTimeval(timeval) {
+      return timeval is timestamp &&
+             timeval > request.time - duration.value(24, 'h') &&
+             timeval < request.time + duration.value(5, 'm');
+    }
+    
+    function isValidCoordinates(lat, lng) {
+      return lat is number && lng is number &&
+             lat >= -90 && lat <= 90 &&
+             lng >= -180 && lng <= 180;
+    }
+
+    // --- USERS SCOPE ---
+    match /users/{userId} {
+      // Owner can read/delete their own profile
+      allow read: if isUser(userId);
+      allow delete: if isUser(userId);
+      
+      // Allow create with all the fields you use in auth.js
+      allow create: if isUser(userId) && 
+        request.resource.data.keys().hasAll(['email', 'name', 'monthlyEmailCount', 'lastEmailMonth']);
+
+      // Allow update for the quota resets
+      allow update: if isUser(userId) && 
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['monthlyEmailCount', 'lastEmailMonth', 'updatedAt', 'email', 'name', 'lastLogin']);
+
+      // JOURNEY subcollection
+      match /journeys/{journeyId} {
+        allow read, delete: if isUser(userId);
+        
+        allow create: if isUser(userId) && 
+          request.resource.data.userId == userId &&
+          request.resource.data.keys().hasAll(['userId', 'userEmail', 'mode', 'startTime', 'status']) &&
+          request.resource.data.status in ['active', 'completed', 'paused'] &&
+          isValidTimeval(request.resource.data.startTime);
+          
+        allow update: if isUser(userId) && 
+          request.resource.data.userId == userId;
+      }
+
+      // EMERGENCY CONTACT subcollection
+      match /emergencyContacts/{contactId} {
+        // Owner access
+        allow list, delete: if isUser(userId);
+        allow create: if isUser(userId) && request.resource.data.status == 'pending';
+        allow get: if true; 
+        
+        allow update: if isUser(userId) || (
+          !isSignedIn() && 
+          request.resource.data.userId == userId &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'updatedAt', 'verifiedAt', 'verificationToken']) &&
+          request.resource.data.status == 'verified' && 
+          resource.data.verificationToken == request.resource.data.verificationToken &&
+          resource.data.tokenCreatedAt > request.time - duration.value(7, 'd')
+        );
+      }
+
+      // ALERT subcollection
+      match /alerts/{alertId} {
+        allow read, write: if isUser(userId);
+      }
+    }
+
+    // JOURNEY SHARES
+    match /journeyShares/{shareId} {
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid || 
+        request.auth.token.email == resource.data.contactEmail
+      );
+      
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+   
+    // PUBLIC JOURNEYS FOR SHARE LINKS
+    match /journeys/{journeyId} {
+      allow create: if isSignedIn() && 
+                       request.resource.data.userId == request.auth.uid &&
+                       request.resource.data.startTime is timestamp &&
+                       request.resource.data.status == 'active';
+      
+      allow read, update: if isSignedIn() && 
+                             resource.data.userId == request.auth.uid;
+      
+      // Viewers (unauthenticated) can read journeys via share links
+      allow read: if true;
+      
+      allow delete: if false;
+      
+      // LOCATIONS SUBCOLLECTION (Real-time tracking)
+      match /locations/{locationId} {
+        allow create: if isSignedIn() && 
+                         get(/databases/$(database)/documents/journeys/$(journeyId)).data.userId == request.auth.uid &&
+                         request.resource.data.timestamp is timestamp &&
+                         isValidCoordinates(request.resource.data.lat, request.resource.data.lng);
+        allow read: if isSignedIn() && 
+                       get(/databases/$(database)/documents/journeys/$(journeyId)).data.userId == request.auth.uid;
+        
+        // Viewers can read locations
+        allow read: if true;
+        
+        allow update, delete: if false;
+      }
+      
+      // ALERTS SUBCOLLECTION
+      match /alerts/{alertId} {
+        allow create: if isSignedIn() && 
+                         get(/databases/$(database)/documents/journeys/$(journeyId)).data.userId == request.auth.uid &&
+                         request.resource.data.timestamp is timestamp;
+      
+        allow update: if isSignedIn() && 
+                         get(/databases/$(database)/documents/journeys/$(journeyId)).data.userId == request.auth.uid;
+        
+        allow read: if isSignedIn() && 
+                       get(/databases/$(database)/documents/journeys/$(journeyId)).data.userId == request.auth.uid;
+        
+        // Viewers can read alerts
+        allow read: if true;
+        
+        allow delete: if false;
+      }
+    }
+    
+    // ---------------------------------------------------------
+    // SHARE LINKS — Token Management + Security Enforcement
+    // ---------------------------------------------------------
+    match /shareLinks/{tokenHash} {
+    
+      // CREATE: Only authenticated users, with correct initial state
+      allow create: if isSignedIn() &&
+                       request.resource.data.journeyId is string &&
+                       request.resource.data.createdAt is timestamp &&
+                       request.resource.data.expiresAt is timestamp &&
+                       request.resource.data.activeViewers == 0 &&
+                       request.resource.data.maxViewers == 10 &&
+                       request.resource.data.failedAttempts == 0 &&
+                       request.resource.data.isActive == true &&
+                       request.resource.data.deviceLock == null;
+      
+      // READ: Anyone with the token hash can read (viewer.js needs this)
+      allow read: if true;
+      
+      // UPDATE: Allow ONLY specific field-sets that match real app operations
+      // Each condition maps to a specific JS function in share-manager.js / viewer.js
+      allow update: if
+        // 1. registerViewer() — increments activeViewers, totalAccessCount, lastAccessedAt
+        (
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['activeViewers', 'totalAccessCount', 'lastAccessedAt']) &&
+          request.resource.data.activeViewers <= resource.data.maxViewers &&
+          request.resource.data.maxViewers == resource.data.maxViewers
+        )
+        ||
+        // 2. unregisterViewer() — decrements activeViewers only
+        (
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['activeViewers']) &&
+          request.resource.data.activeViewers >= 0 &&
+          request.resource.data.maxViewers == resource.data.maxViewers
+        )
+        ||
+        // 3. validateToken() — sets deviceLock (null -> fingerprint, one-time only)
+        (
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['deviceLock']) &&
+          resource.data.deviceLock == null
+        )
+        ||
+        // 4. updateJourneyStatus() — updates journeyStatus and optionally expiresAt
+        (
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['journeyStatus', 'expiresAt']) &&
+          request.resource.data.maxViewers == resource.data.maxViewers
+        )
+        ||
+        // 5. deactivateLink() — sets isActive=false and deactivatedAt
+        (
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['isActive', 'deactivatedAt']) &&
+          request.resource.data.isActive == false
+        )
+        ||
+        // 6. logFailedValidation() — increments failedAttempts
+        (
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['failedAttempts']) &&
+          request.resource.data.failedAttempts == resource.data.failedAttempts + 1
+        )
+        ||
+        // 7. startHeartbeat() in viewer.js — updates lastAccessedAt only
+        (
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['lastAccessedAt'])
+        );
+      
+      // DELETE: Never allow deletion of share links
+      allow delete: if false;
+    }
+
+    // ---------------------------------------------------------
+    // SECURITY LOGS — Append-only audit trail
+    // ---------------------------------------------------------
+    match /securityLogs/{logId} {
+      allow create: if request.resource.data.timestamp is timestamp;
+      allow read, update, delete: if false;
+    }
+    
+    // CATCH-ALL DENY — Block everything not explicitly allowed
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

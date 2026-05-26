@@ -3,45 +3,63 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sentinel GPS - Secure Login</title>
+    <title>Sentinel GPS - Secure Tracking</title>
+  
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+    
+    <script src="js/firebase-config.js"></script>
+    <script src="js/firebase-init.js"></script>  
+    <script src="js/database.js"></script>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
     <link rel="stylesheet" href="index.css">
 </head>
 <body>
 
-    <div class="glass-card">
-        <div class="logo-area">
-            <h1>🛡️ Sentinel GPS</h1>
-            <div class="pulse-line"></div>
-        </div>
-        
-        <p>Active Security Tracking Protocol. <br>Select your transportation mode to begin.</p>
+    <div class="hero-wrapper">
+        <div id="map"></div>
 
-        <div class="mode-container">
-            <button class="mode-btn" onclick="selectMode('walking')">
-                <span class="emoji">🚶</span> 
-                <span class="label">Walking</span>
-            </button>
-            <button class="mode-btn" onclick="selectMode('car')">
-                <span class="emoji">🚗</span> 
-                <span class="label">Car / Bike</span>
-            </button>
-            <button class="mode-btn" onclick="selectMode('train')">
-                <span class="emoji">🚆</span> 
-                <span class="label">Train / Bus</span>
-            </button>
+        <div class="text-section">
+            <h1>Sentinel </h1>
+            <h2>Your safe partner</h2>
+            <p>Never travel alone. Share your live route with loved ones, backed by a self-triggering alarm. If it detects an unexpected detour, dangerous speeding, or an unusual stop, it instantly alerts your trusted circle. Real-time safety, automatically.</p>
+            
+            <div class="cta-section">
+                <div id="guest-view">
+                    <a href="auth.html?mode=signup" class="primary-btn" style="display: inline-block; text-decoration: none; margin-bottom: 20px;">
+                        Get Started - It's Free
+                    </a>
+                    <div class="secondary-action">
+                        <p style="margin-bottom: 10px; color: #666;">Already have an account?</p>
+                        <a href="auth.html?mode=login" class="secondary-btn" style="display: inline-block; text-decoration: none;">
+                            Sign In
+                        </a>
+                    </div>
+                </div>
+
+                <div id="user-view" style="display: none;">
+                    <div class="welcome-back">
+                        <h3 style="margin-bottom: 10px; font-size: 1.5rem;">Welcome back, <span id="user-name">User</span>! 👋</h3>
+                        <p style="margin-bottom: 20px;">Ready to start tracking?</p>
+                    </div>
+                    <div class="buttons">
+                        <a href="dashboard.html" class="primary-btn" style="text-decoration: none;">🏠 Dashboard</a>
+                        <button onclick="handleLogout()" class="secondary-btn">🚪 Logout</button>
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <div class="footer-note">
-            Encrypted End-to-End GPS Monitoring Active
-        </div>
+        <div class="gradient-bridge"></div>
     </div>
 
-    <script>
-        function selectMode(mode) {
-            localStorage.setItem('userTransportMode', mode);
-            window.location.href = 'tracker.html';
-        }
-    </script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+    <script src="index.js"></script>
 
 </body>
 </html>
